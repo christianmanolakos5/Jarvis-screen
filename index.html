@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>J.A.R.V.I.S. — Christian's Interface</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Ambient grid + scanlines -->
+  <div class="bg-grid"></div>
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+
+  <!-- ===================== TOP-LEFT: CLOCK / DATE / WEATHER ===================== -->
+  <section class="panel top-left">
+    <div class="clock">
+      <span id="time">--:--</span><span id="ampm" class="ampm">--</span>
+    </div>
+    <div class="day" id="day">------</div>
+    <div class="date" id="date">--------</div>
+
+    <div class="weather-inline">
+      <span id="wx-icon" class="wx-icon">◐</span>
+      <span id="wx-temp">--°</span>
+    </div>
+
+    <div class="now-playing">
+      <div class="np-label">NOW<br />PLAYING</div>
+      <div class="np-info">
+        <div class="np-artist" id="np-artist">J.A.R.V.I.S.</div>
+        <div class="np-track" id="np-track">Systems Online</div>
+      </div>
+    </div>
+
+    <div class="brand">Jarvis Display System · Christian ∞™</div>
+  </section>
+
+  <!-- ===================== CENTER: ARC REACTOR HUD ===================== -->
+  <section class="reactor-wrap">
+    <div class="reactor">
+      <!-- Rotating SVG rings -->
+      <svg class="ring ring-outer" viewBox="0 0 400 400">
+        <circle class="ring-track" cx="200" cy="200" r="190" />
+        <g class="ticks" id="ticks-outer"></g>
+      </svg>
+
+      <svg class="ring ring-mid" viewBox="0 0 400 400">
+        <circle class="dash" cx="200" cy="200" r="150" />
+        <circle class="dash dash-2" cx="200" cy="200" r="130" />
+      </svg>
+
+      <svg class="ring ring-inner" viewBox="0 0 400 400">
+        <g id="ticks-inner"></g>
+      </svg>
+
+      <!-- Audio-reactive bars -->
+      <canvas class="viz" id="viz" width="440" height="440"></canvas>
+
+      <!-- Core -->
+      <div class="core">
+        <div class="core-glow"></div>
+        <div class="core-num" id="core-num">33</div>
+        <div class="core-label" id="core-label">STANDBY</div>
+      </div>
+
+      <!-- Corner labels -->
+      <div class="hud-label hl-tl">SYS ONLINE</div>
+      <div class="hud-label hl-tr">MIC READY</div>
+      <div class="hud-label hl-bl">VOICE</div>
+      <div class="hud-label hl-br">CHRISTIAN</div>
+    </div>
+  </section>
+
+  <!-- ===================== RIGHT: WEATHER + STATUS ===================== -->
+  <section class="panel top-right">
+    <div class="wx-loc" id="wx-loc">Locating…</div>
+    <div class="wx-updated" id="wx-updated">Updating…</div>
+    <div class="wx-big" id="wx-big">--°</div>
+    <div class="wx-cond" id="wx-cond">—</div>
+    <ul class="wx-list">
+      <li>Humidity: <span id="wx-hum">--%</span></li>
+      <li>Feels Like: <span id="wx-feels">--°</span></li>
+      <li>Wind: <span id="wx-wind">-- km/h</span></li>
+      <li>Precipitation: <span id="wx-precip">--%</span></li>
+    </ul>
+
+    <div class="status-block">
+      <div class="status-title">SYSTEM</div>
+      <div class="stat"><span>CPU</span><div class="bar"><i id="bar-cpu"></i></div></div>
+      <div class="stat"><span>MEM</span><div class="bar"><i id="bar-mem"></i></div></div>
+      <div class="stat"><span>NET</span><div class="bar"><i id="bar-net"></i></div></div>
+    </div>
+  </section>
+
+  <!-- ===================== BOTTOM: TRANSCRIPT / CONTROLS ===================== -->
+  <section class="console">
+    <div class="transcript" id="transcript">
+      <div class="line jarvis">J.A.R.V.I.S. standing by. Press the mic or say hello, Christian.</div>
+    </div>
+
+    <div class="controls">
+      <button id="mic-btn" class="mic-btn" title="Talk to Jarvis">
+        <span class="mic-icon">🎙</span>
+        <span class="mic-text">TALK</span>
+      </button>
+      <input id="text-input" class="text-input" type="text"
+             placeholder="…or type a command and press Enter" autocomplete="off" />
+      <button id="mute-btn" class="ghost-btn" title="Toggle voice output">🔊</button>
+    </div>
+    <div class="hint" id="hint">
+      Try: “what time is it”, “what’s the weather”, “tell me a joke”, “open YouTube”, “who are you”
+    </div>
+  </section>
+
+  <script src="script.js"></script>
+</body>
+</html>
