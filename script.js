@@ -17,11 +17,10 @@ const el = {
   wxCond: $("wx-cond"), wxHum: $("wx-hum"), wxFeels: $("wx-feels"),
   wxWind: $("wx-wind"), wxPrecip: $("wx-precip"),
   coreNum: $("core-num"), coreLabel: $("core-label"),
-  transcript: $("transcript"), micBtn: $("mic-btn"), textInput: $("text-input"),
-  muteBtn: $("mute-btn"), reactor: document.querySelector(".reactor"),
+  transcript: $("transcript"), reactor: document.querySelector(".reactor"),
   npArtist: $("np-artist"), npTrack: $("np-track"),
   barCpu: $("bar-cpu"), barMem: $("bar-mem"), barNet: $("bar-net"),
-  micSelect: $("mic-select"), hint: $("hint"),
+  hint: $("hint"),
 };
 
 function setStatus(msg) { el.hint.innerHTML = msg; }
@@ -237,13 +236,6 @@ setInterval(() => {
   try { if (speechSynthesis.speaking) speechSynthesis.resume(); } catch (e) {}
 }, 4000);
 
-el.muteBtn.addEventListener("click", () => {
-  muted = !muted;
-  el.muteBtn.textContent = muted ? "🔈" : "🔊";
-  el.muteBtn.classList.toggle("muted", muted);
-  if (muted) speechSynthesis.cancel();
-});
-
 /* iOS requires a user gesture to unlock audio output. */
 let audioUnlocked = false;
 let toneCtx = null;
@@ -389,49 +381,13 @@ function processInput(text) {
   if (reply) speak(reply);
 }
 
-el.textInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && el.textInput.value.trim()) {
-    unlockAudio();
-    processInput(el.textInput.value.trim());
-    el.textInput.value = "";
-  }
-});
-
 /* ============================================================
-   8. AUDIO DEVICE PICKER (Bluetooth-friendly)
+   8. MICROPHONE (uses the system default input — Bluetooth when connected)
    ============================================================ */
-let preferredDeviceId = "";
-
-async function populateDevices() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
-  try {
-    const devs = await navigator.mediaDevices.enumerateDevices();
-    const ins = devs.filter((d) => d.kind === "audioinput" && d.label);
-    if (ins.length > 1) {
-      const cur = el.micSelect.value;
-      el.micSelect.innerHTML = "";
-      const def = document.createElement("option");
-      def.value = ""; def.textContent = "🎧 System default (incl. Bluetooth)";
-      el.micSelect.appendChild(def);
-      ins.forEach((d) => {
-        const o = document.createElement("option");
-        o.value = d.deviceId; o.textContent = d.label;
-        el.micSelect.appendChild(o);
-      });
-      el.micSelect.value = cur;
-      el.micSelect.hidden = false;
-    }
-  } catch (e) {}
-}
-el.micSelect.addEventListener("change", () => { preferredDeviceId = el.micSelect.value; });
-if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-  navigator.mediaDevices.addEventListener("devicechange", populateDevices);
-}
+function populateDevices() {}   /* no device picker in the single-button UI */
 
 function micConstraints() {
-  const base = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-  if (preferredDeviceId) base.deviceId = { exact: preferredDeviceId };
-  return { audio: base };
+  return { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
 }
 
 /* ============================================================
@@ -443,14 +399,12 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const useNative = !!SR;
 let listening = false;
 
-/* ---------- Mic UI helper ---------- */
+/* ---------- Reactor state helper ---------- */
 function setMicUI(state) {
-  const txt = el.micBtn.querySelector(".mic-text");
-  el.micBtn.classList.toggle("live", state === "recording");
   el.reactor.classList.toggle("listening", state === "recording");
-  if (state === "recording") { txt.textContent = "LISTENING"; el.coreLabel.textContent = "LISTENING"; }
-  else if (state === "thinking") { txt.textContent = "THINKING"; el.coreLabel.textContent = "THINKING"; }
-  else { txt.textContent = "TALK"; el.coreLabel.textContent = speaking ? "SPEAKING" : "STANDBY"; }
+  if (state === "recording") el.coreLabel.textContent = "LISTENING";
+  else if (state === "thinking") el.coreLabel.textContent = "THINKING";
+  else el.coreLabel.textContent = speaking ? "SPEAKING" : "STANDBY";
 }
 
 /* ---------- Path A: native ---------- */
@@ -463,7 +417,7 @@ if (useNative) {
   recog.onresult = (e) => { processInput(e.results[0][0].transcript); };
   recog.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed")
-      speak(`I could not access the microphone, ${USER_NAME}. Please grant permission, or type to me instead.`);
+      speak(`I could not access the microphone, ${USER_NAME}. Please grant permission and tap the circle again.`);
   };
   recog.onend = () => { listening = false; setMicUI("idle"); populateDevices(); };
 }
@@ -492,7 +446,7 @@ async function ensureTranscriber() {
       },
     });
     transcriber = t;
-    setStatus("Voice model ready, Christian. Tap TALK and speak.");
+    setStatus("Voice model ready, Christian. Tap the circle and speak.");
     return t;
   })();
   return transcriberPromise;
@@ -539,7 +493,7 @@ async function startRecording() {
   } catch (err) {
     recState = "idle"; listening = false; setMicUI("idle");
     setStatus("Microphone blocked — enable it for this site in Safari settings, Christian.");
-    speak(`I could not access the microphone, ${USER_NAME}. You can also type to me below.`);
+    speak(`I could not access the microphone, ${USER_NAME}.`);
   }
 }
 
@@ -554,7 +508,7 @@ async function stopRecording() {
 
   if (!merged.length || !speechDetected) {
     recState = "idle"; setMicUI("idle");
-    setStatus("I didn't catch anything, Christian. Tap TALK and try again.");
+    setStatus("I didn't catch anything, Christian. Tap the circle and try again.");
     return;
   }
 
@@ -565,11 +519,11 @@ async function stopRecording() {
     const out = await t(audio16k);
     const text = (out && out.text ? out.text : "").trim();
     recState = "idle"; setMicUI("idle");
-    if (text && !/^\[.*\]$/.test(text)) { processInput(text); setStatus("Tap TALK to speak again, Christian."); }
-    else { setStatus("I didn't catch that, Christian. Tap TALK and try again."); }
+    if (text && !/^\[.*\]$/.test(text)) { processInput(text); setStatus("Tap the circle to speak again, Christian."); }
+    else { setStatus("I didn't catch that, Christian. Tap the circle and try again."); }
   } catch (e) {
     recState = "idle"; setMicUI("idle");
-    setStatus("Voice model hiccup — you can type your command instead, Christian.");
+    setStatus("Voice model hiccup — tap the circle to try again, Christian.");
   }
 }
 
@@ -613,32 +567,25 @@ function toggleVoice() {
    ============================================================ */
 let activated = false;
 
-el.micBtn.addEventListener("click", () => {
+/* The glowing reactor IS the only button. */
+function onReactorTap() {
   unlockAudio();
   if (!activated) {
     activated = true;
     setMicUI("idle");
     el.coreLabel.textContent = "ONLINE";
-    const st = toneCtx ? toneCtx.state : "—";
-    const nv = ("speechSynthesis" in window) ? speechSynthesis.getVoices().length : 0;
-    // Print the diagnostic into the visible console box, not just the hint line.
-    addLine("jarvis", `[sound check] engine: ${st} · voices: ${nv} — you should hear a chime now.`);
-    setStatus(`Sound engine: <b>${st}</b>. Press Volume Up if you hear nothing.`);
+    setStatus("Tap the circle again and speak, Christian.");
     chime();                                   // audible confirmation
     speak(`Hello ${USER_NAME}, how can I help you?`);
     return;
   }
   toggleVoice();
-});
+}
+el.reactor.addEventListener("click", onReactorTap);
 
-/* Desktop convenience: hold SPACE to talk (when not typing). */
+/* Desktop convenience: press SPACE to talk. */
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && document.activeElement !== el.textInput) {
-    e.preventDefault();
-    unlockAudio();
-    if (!activated) { el.micBtn.click(); return; }
-    toggleVoice();
-  }
+  if (e.code === "Space") { e.preventDefault(); onReactorTap(); }
 });
 
 /* ============================================================
@@ -649,14 +596,4 @@ window.addEventListener("load", () => {
   el.npArtist.textContent = "J.A.R.V.I.S.";
   el.npTrack.textContent = "Systems Online";
   setMicUI("idle");
-  el.micBtn.querySelector(".mic-text").textContent = "ACTIVATE";
-
-  // Build/sound-status badge, fixed TOP-left (visible above Safari's toolbar).
-  badgeEl = document.createElement("div");
-  badgeEl.style.cssText =
-    "position:fixed;left:6px;top:calc(env(safe-area-inset-top) + 4px);z-index:60;" +
-    "font-size:10px;color:#7fe8ff;background:rgba(4,10,16,.7);padding:2px 6px;" +
-    "border-radius:6px;font-family:monospace;pointer-events:none;";
-  document.body.appendChild(badgeEl);
-  updateAudioBadge();
 });

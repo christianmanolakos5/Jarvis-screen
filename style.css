@@ -105,7 +105,10 @@ html, body {
   position: fixed; inset: 0; z-index: 5;
   display: flex; align-items: center; justify-content: center;
 }
-.reactor { position: relative; width: 62vh; height: 62vh; max-width: 640px; max-height: 640px; }
+.reactor { position: relative; width: 62vh; height: 62vh; max-width: 640px; max-height: 640px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.reactor:active { transform: scale(0.98); }
+.reactor .core { transition: box-shadow 0.2s, border-color 0.2s; }
 
 .ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .ring circle { fill: none; }

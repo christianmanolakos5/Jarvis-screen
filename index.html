@@ -8,7 +8,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <title>J.A.R.V.I.S. — Christian's Interface</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="style.css?v=8" />
+  <link rel="stylesheet" href="style.css?v=9" />
 </head>
 <body>
   <!-- Ambient grid + scanlines -->
@@ -97,30 +97,14 @@
     </div>
   </section>
 
-  <!-- ===================== BOTTOM: TRANSCRIPT / CONTROLS ===================== -->
+  <!-- ===================== BOTTOM: TRANSCRIPT ===================== -->
   <section class="console">
     <div class="transcript" id="transcript">
-      <div class="line jarvis">J.A.R.V.I.S. standing by. Tap ACTIVATE and I'll greet you, Christian.</div>
+      <div class="line jarvis">J.A.R.V.I.S. standing by. Tap the circle to talk to me, Christian.</div>
     </div>
-
-    <div class="controls">
-      <button id="mic-btn" class="mic-btn" title="Talk to Jarvis">
-        <span class="mic-icon">🎙</span>
-        <span class="mic-text">ACTIVATE</span>
-      </button>
-      <input id="text-input" class="text-input" type="text"
-             placeholder="…or type a command and press Enter" autocomplete="off" />
-      <button id="mute-btn" class="ghost-btn" title="Toggle voice output">🔊</button>
-    </div>
-    <div class="dev-row">
-      <select id="mic-select" class="dev-select" title="Microphone input" hidden></select>
-    </div>
-    <div class="hint" id="hint">
-      Tap <b>ACTIVATE</b> to wake Jarvis, then tap again and speak. On iPhone the first
-      run downloads a small on-device voice model (a few seconds, one time).
-    </div>
+    <div class="hint" id="hint">Tap the glowing circle to talk.</div>
   </section>
 
-  <script src="script.js?v=8"></script>
+  <script src="script.js?v=9"></script>
 </body>
 </html>
