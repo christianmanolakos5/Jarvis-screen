@@ -253,10 +253,15 @@ function unlockAudio() {
   // Web Audio context — used for the chime (media channel, ignores Silent Mode).
   try {
     toneCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Classic iOS unlock: play a 1-sample silent buffer inside the user gesture.
+    const b = toneCtx.createBuffer(1, 1, 22050);
+    const s = toneCtx.createBufferSource();
+    s.buffer = b; s.connect(toneCtx.destination); s.start(0);
     if (toneCtx.state === "suspended") toneCtx.resume();
   } catch (e) {}
   // Wake the speech engine within the gesture (no cancel, no silent utterance).
   try { speechSynthesis.resume(); } catch (e) {}
+  updateAudioBadge();
 }
 
 /* A short two-note chime so there is guaranteed audible feedback on tap.
@@ -272,12 +277,23 @@ function chime() {
       o.type = "sine"; o.frequency.value = freq;
       const start = t0 + delay;
       g.gain.setValueAtTime(0.0001, start);
-      g.gain.exponentialRampToValueAtTime(0.25, start + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+      g.gain.exponentialRampToValueAtTime(0.6, start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.30);
       o.connect(g); g.connect(toneCtx.destination);
-      o.start(start); o.stop(start + 0.24);
+      o.start(start); o.stop(start + 0.32);
     });
   } catch (e) {}
+  updateAudioBadge();
+}
+
+/* Visible sound-engine status badge (so we can see what iOS is doing). */
+const BUILD = 7;
+let badgeEl = null;
+function updateAudioBadge() {
+  if (!badgeEl) return;
+  const st = toneCtx ? toneCtx.state : "not started";
+  const nVoices = ("speechSynthesis" in window) ? speechSynthesis.getVoices().length : 0;
+  badgeEl.textContent = `BUILD ${BUILD} · sound: ${st} · voices: ${nVoices}`;
 }
 
 /* ============================================================
@@ -603,9 +619,9 @@ el.micBtn.addEventListener("click", () => {
     activated = true;
     setMicUI("idle");
     el.coreLabel.textContent = "ONLINE";
-    setStatus(useNative
-      ? "Jarvis online. Tap TALK and speak, Christian."
-      : "Jarvis online. Tap TALK, allow the mic, then speak, Christian.");
+    const st = toneCtx ? toneCtx.state : "—";
+    setStatus(`Sound engine: <b>${st}</b>. You should hear a chime and my voice now, Christian. ` +
+      `If not, press Volume Up while this page is open.`);
     chime();                                   // audible confirmation
     speak(`Hello ${USER_NAME}, how can I help you?`);
     return;
@@ -632,4 +648,12 @@ window.addEventListener("load", () => {
   el.npTrack.textContent = "Systems Online";
   setMicUI("idle");
   el.micBtn.querySelector(".mic-text").textContent = "ACTIVATE";
+
+  // Build/sound-status badge, fixed bottom-left, so state is always visible.
+  badgeEl = document.createElement("div");
+  badgeEl.style.cssText =
+    "position:fixed;left:8px;bottom:6px;z-index:60;font-size:10px;" +
+    "color:#37c6f4;opacity:.8;font-family:monospace;pointer-events:none;";
+  document.body.appendChild(badgeEl);
+  updateAudioBadge();
 });
