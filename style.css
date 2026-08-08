@@ -230,10 +230,85 @@ html, body {
 .hint { margin-top: 10px; font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; line-height: 1.5; }
 .hint b { color: var(--cyan-bright); }
 
-/* ---------- Responsive ---------- */
-@media (max-width: 820px) {
-  .clock { font-size: 54px; }
-  .np-track { font-size: 26px; }
-  .top-right { display: none; }
-  .reactor { width: 78vw; height: 78vw; }
+/* ---------- Tablet ---------- */
+@media (max-width: 1024px) and (min-width: 761px) {
+  .clock { font-size: 60px; }
+  .np-track { font-size: 28px; }
+  .top-right { width: 220px; }
+  .reactor { width: 66vh; height: 66vh; }
+}
+
+/* ============================================================
+   PHONE — full single-screen app layout (portrait)
+   Everything stacks and fits within the viewport; no zooming.
+   ============================================================ */
+@media (max-width: 760px) {
+  html, body {
+    height: 100dvh;         /* fills the screen incl. Safari toolbars */
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: calc(env(safe-area-inset-top) + 8px) 12px
+             calc(env(safe-area-inset-bottom) + 8px);
+  }
+
+  /* ---- Top cluster: clock + weather ---- */
+  .top-left {
+    position: static; order: 1; text-align: center;
+    width: 100%; margin: 2px 0 0;
+  }
+  .clock { font-size: 44px; line-height: 1; }
+  .ampm { font-size: 15px; }
+  .day { font-size: 20px; margin-top: 0; }
+  .date { font-size: 13px; }
+  .weather-inline { justify-content: center; font-size: 17px; margin-top: 4px; }
+  .now-playing, .brand { display: none; }   /* saved for the big screen */
+
+  /* ---- Reactor: flexible centerpiece ---- */
+  .reactor-wrap {
+    position: static; order: 2; inset: auto;
+    flex: 1 1 auto; width: 100%;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 0;                 /* let it shrink so nothing clips */
+  }
+  .reactor {
+    width: min(74vw, 40vh);
+    height: min(74vw, 40vh);
+    max-width: none; max-height: none;
+  }
+  .core-num { font-size: 30px; }
+  .hud-label { font-size: 8px; }
+
+  /* ---- Compact weather strip under reactor ---- */
+  .top-right {
+    position: static; order: 3; width: 100%;
+    text-align: center; display: flex; gap: 12px;
+    align-items: baseline; justify-content: center; margin: 2px 0;
+  }
+  .top-right .wx-loc, .top-right .wx-updated,
+  .top-right .wx-list, .top-right .status-block { display: none; }
+  .wx-big { font-size: 22px; }
+  .wx-cond { font-size: 13px; margin: 0; }
+
+  /* ---- Console pinned at the bottom ---- */
+  .console {
+    position: static; order: 4; transform: none;
+    left: auto; bottom: auto; width: 100%; margin-top: 4px;
+  }
+  .transcript { height: 64px; font-size: 13px; margin-bottom: 8px; }
+  .controls { flex-wrap: wrap; gap: 8px; }
+  .mic-btn { padding: 12px 22px; font-size: 15px; }   /* thumb-friendly */
+  .text-input { order: 3; flex: 1 1 100%; max-width: none; }
+  .dev-row { margin-top: 8px; }
+  .hint { margin-top: 8px; font-size: 10px; }
+}
+
+/* Extra-small phones: trim a little more */
+@media (max-width: 380px) {
+  .clock { font-size: 38px; }
+  .reactor { width: min(78vw, 36vh); height: min(78vw, 36vh); }
+  .transcript { height: 52px; }
 }
