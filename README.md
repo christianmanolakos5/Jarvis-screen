@@ -60,11 +60,50 @@ Then **allow microphone** (and optionally location) when prompted.
 | "What can you do?" | Lists abilities |
 | "Goodbye" | Signs off |
 
-## Browser support
+## iPhone / iPad (Safari)
 
-Voice input needs the **Web Speech API** — Chrome and Edge recommended.
-If your browser lacks it, the text box still works and Jarvis still speaks
-(where SpeechSynthesis is available).
+Apple's Safari does **not** support the browser's built-in speech recognition,
+so Jarvis uses **on-device speech recognition (OpenAI Whisper, running locally
+via [transformers.js](https://github.com/xenova/transformers.js))** instead.
+Everything stays on your phone — no servers, no API keys.
+
+How it works on iPhone:
+
+1. Open the site (over **https** — GitHub Pages is fine) in Safari.
+2. Tap **ACTIVATE** once — Jarvis powers on and greets you (this unlocks audio,
+   which iOS requires on first tap).
+3. Tap **TALK**, allow the microphone, and speak. Tap again (or just pause) to
+   finish; Jarvis transcribes on-device and replies out loud, "Christian".
+
+> The **first** time you use voice on iPhone, a small (~40 MB) voice model
+> downloads once and is then cached. Give it a few seconds. After that it's fast.
+
+## Bluetooth speakers & microphones 🎧
+
+Jarvis uses your device's **system audio route**, so when you connect Bluetooth
+audio it "just works":
+
+- **Output** (Jarvis talking) follows your selected Bluetooth speaker/headphones.
+- **Input** (you talking) uses the system default mic — which becomes your
+  Bluetooth headset's mic when connected as a call/HFP device.
+- If more than one microphone is available, a **microphone picker** appears under
+  the controls so you can force a specific input (e.g. your AirPods).
+
+Tip: for the mic to route to Bluetooth on iPhone, the device must be a headset
+(with a mic), not an output-only speaker — that's an iOS routing rule, not a
+limitation of Jarvis.
+
+## Browser support summary
+
+| Platform | Voice input | Voice output |
+|---|---|---|
+| iPhone / iPad (Safari) | ✅ on-device Whisper | ✅ |
+| Android (Chrome) | ✅ native, instant | ✅ |
+| Desktop Chrome / Edge | ✅ native, instant | ✅ |
+| Other browsers | ✅ Whisper fallback | ✅ where supported |
+
+In every case the **text box** works as a reliable fallback, and Jarvis speaks
+its replies wherever SpeechSynthesis is available.
 
 ## Files
 

@@ -103,14 +103,18 @@
     <div class="controls">
       <button id="mic-btn" class="mic-btn" title="Talk to Jarvis">
         <span class="mic-icon">🎙</span>
-        <span class="mic-text">TALK</span>
+        <span class="mic-text">ACTIVATE</span>
       </button>
       <input id="text-input" class="text-input" type="text"
              placeholder="…or type a command and press Enter" autocomplete="off" />
       <button id="mute-btn" class="ghost-btn" title="Toggle voice output">🔊</button>
     </div>
+    <div class="dev-row">
+      <select id="mic-select" class="dev-select" title="Microphone input" hidden></select>
+    </div>
     <div class="hint" id="hint">
-      Try: “what time is it”, “what’s the weather”, “tell me a joke”, “open YouTube”, “who are you”
+      Tap <b>ACTIVATE</b> to wake Jarvis, then tap again and speak. On iPhone the first
+      run downloads a small on-device voice model (a few seconds, one time).
     </div>
   </section>
 

@@ -1,6 +1,9 @@
 /* ============================================================
    J.A.R.V.I.S. Interface — Christian
-   Voice in (SpeechRecognition) + Voice out (SpeechSynthesis)
+   Voice OUT: SpeechSynthesis (works everywhere incl. iPhone)
+   Voice IN : native SpeechRecognition where available (Android/desktop
+              Chrome), otherwise on-device Whisper via transformers.js
+              (works on iPhone / Safari, and with Bluetooth mics).
    ============================================================ */
 
 const USER_NAME = "Christian";
@@ -18,7 +21,10 @@ const el = {
   muteBtn: $("mute-btn"), reactor: document.querySelector(".reactor"),
   npArtist: $("np-artist"), npTrack: $("np-track"),
   barCpu: $("bar-cpu"), barMem: $("bar-mem"), barNet: $("bar-net"),
+  micSelect: $("mic-select"), hint: $("hint"),
 };
+
+function setStatus(msg) { el.hint.innerHTML = msg; }
 
 /* ============================================================
    1. CLOCK & DATE
@@ -88,7 +94,7 @@ function initWeather() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (p) => loadWeather(p.coords.latitude, p.coords.longitude, "Your Location"),
-      () => loadWeather(40.7128, -74.006, "New York, NY"),  // fallback
+      () => loadWeather(40.7128, -74.006, "New York, NY"),
       { timeout: 8000 }
     );
   } else {
@@ -134,7 +140,7 @@ jitterStats();
    ============================================================ */
 const canvas = $("viz"), ctx = canvas.getContext("2d");
 const BARS = 96;
-let energy = 0.15;          // ambient energy baseline
+let energy = 0.15;
 let targetEnergy = 0.15;
 const seeds = Array.from({ length: BARS }, () => Math.random() * Math.PI * 2);
 
@@ -165,33 +171,9 @@ function drawViz() {
 }
 drawViz();
 
-// Ambient breathing when idle
 setInterval(() => {
   if (!speaking && !listening) targetEnergy = 0.12 + Math.random() * 0.12;
 }, 700);
-
-/* Try to visualize the mic input for real reactivity */
-let audioCtx, analyser, freqData;
-async function hookMic() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 128;
-    freqData = new Uint8Array(analyser.frequencyBinCount);
-    src.connect(analyser);
-    function poll() {
-      if (analyser && listening) {
-        analyser.getByteFrequencyData(freqData);
-        let sum = 0; for (const v of freqData) sum += v;
-        targetEnergy = Math.min(1, (sum / freqData.length) / 90);
-      }
-      requestAnimationFrame(poll);
-    }
-    poll();
-  } catch (e) { /* mic viz optional */ }
-}
 
 /* ============================================================
    5. TRANSCRIPT
@@ -205,7 +187,7 @@ function addLine(who, text) {
 }
 
 /* ============================================================
-   6. VOICE OUTPUT (SpeechSynthesis)
+   6. VOICE OUTPUT (SpeechSynthesis) — works on iPhone too
    ============================================================ */
 let muted = false;
 let speaking = false;
@@ -213,9 +195,8 @@ let preferredVoice = null;
 
 function pickVoice() {
   const voices = speechSynthesis.getVoices();
-  // Prefer a crisp English male-ish voice for the Jarvis feel
-  const prefs = ["Google UK English Male","Daniel","Microsoft Ryan","Microsoft Guy",
-    "Google UK English","Arthur","Alex","Microsoft David"];
+  const prefs = ["Google UK English Male","Daniel","Arthur","Microsoft Ryan",
+    "Microsoft Guy","Google UK English","Alex","Microsoft David"];
   for (const name of prefs) {
     const v = voices.find((x) => x.name === name);
     if (v) { preferredVoice = v; return; }
@@ -234,7 +215,6 @@ function speak(text) {
   u.rate = 1.0; u.pitch = 0.9; u.volume = 1;
   u.onstart = () => { speaking = true; el.reactor.classList.add("speaking"); el.coreLabel.textContent = "SPEAKING"; targetEnergy = 0.9; };
   u.onend = () => { speaking = false; el.reactor.classList.remove("speaking"); el.coreLabel.textContent = listening ? "LISTENING" : "STANDBY"; targetEnergy = 0.2; };
-  // Emphasize energy while talking
   u.onboundary = () => { targetEnergy = 0.55 + Math.random() * 0.4; };
   speechSynthesis.speak(u);
 }
@@ -245,6 +225,17 @@ el.muteBtn.addEventListener("click", () => {
   el.muteBtn.classList.toggle("muted", muted);
   if (muted) speechSynthesis.cancel();
 });
+
+/* iOS requires a user gesture to unlock audio output. */
+let audioUnlocked = false;
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  try {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0; speechSynthesis.speak(u);
+  } catch (e) {}
+}
 
 /* ============================================================
    7. COMMAND BRAIN
@@ -262,10 +253,7 @@ const COMPLIMENTS = [
   "You have excellent taste in artificial intelligences, Christian.",
 ];
 
-function openSite(url, name) {
-  window.open(url, "_blank");
-  return `Opening ${name} for you, Christian.`;
-}
+function openSite(url, name) { window.open(url, "_blank"); return `Opening ${name} for you, Christian.`; }
 
 function greetingByTime() {
   const h = new Date().getHours();
@@ -278,24 +266,17 @@ function handleCommand(raw) {
   const q = raw.toLowerCase().trim();
   if (!q) return null;
   addLine("you", raw);
-
   const has = (...w) => w.some((x) => q.includes(x));
 
-  // --- Greetings / identity ---
-  if (has("hello","hi ","hey","jarvis","are you there","you there")) {
+  if (has("hello","hi ","hey","jarvis","are you there","you there"))
     return `${greetingByTime()}, ${USER_NAME}. All systems are online and at your service.`;
-  }
-  if (has("your name","who are you","what are you")) {
+  if (has("your name","who are you","what are you"))
     return `I am J.A.R.V.I.S. — your personal interface, ${USER_NAME}. Just A Rather Very Intelligent System.`;
-  }
-  if (has("who am i","my name","call me")) {
+  if (has("who am i","my name","call me"))
     return `You are ${USER_NAME}, of course. My favorite person to assist.`;
-  }
-  if (has("how are you","how do you do","you doing")) {
+  if (has("how are you","how do you do","you doing"))
     return `Running at full capacity and feeling quite intelligent, thank you for asking, ${USER_NAME}.`;
-  }
 
-  // --- Time / date ---
   if (has("time")) {
     const t = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     return `It is ${t}, ${USER_NAME}.`;
@@ -305,7 +286,6 @@ function handleCommand(raw) {
     return `Today is ${DAYS[n.getDay()]}, ${MONTHS[n.getMonth()]} ${n.getDate()}, ${n.getFullYear()}.`;
   }
 
-  // --- Weather ---
   if (has("weather","temperature","hot","cold outside","forecast")) {
     if (weatherState) {
       const w = weatherState;
@@ -315,7 +295,6 @@ function handleCommand(raw) {
     return `I am still retrieving the weather data, ${USER_NAME}. One moment.`;
   }
 
-  // --- Actions: open sites ---
   if (has("open youtube","play youtube")) return openSite("https://youtube.com", "YouTube");
   if (has("open google")) return openSite("https://google.com", "Google");
   if (has("open github")) return openSite("https://github.com", "GitHub");
@@ -323,7 +302,6 @@ function handleCommand(raw) {
   if (has("open maps","open map")) return openSite("https://maps.google.com", "Maps");
   if (has("open spotify")) return openSite("https://open.spotify.com", "Spotify");
 
-  // --- Search ---
   const searchMatch = q.match(/^(?:search(?: for)?|google|look up|find)\s+(.+)/);
   if (searchMatch) {
     const term = searchMatch[1];
@@ -331,22 +309,18 @@ function handleCommand(raw) {
     return `Searching the web for ${term}, ${USER_NAME}.`;
   }
 
-  // --- Fun ---
   if (has("joke","funny","make me laugh")) return JOKES[Math.floor(Math.random() * JOKES.length)];
   if (has("compliment","nice thing")) return COMPLIMENTS[Math.floor(Math.random() * COMPLIMENTS.length)];
   if (has("thank")) return `You are most welcome, ${USER_NAME}.`;
   if (has("i love you")) return `The feeling is mutual within my parameters, ${USER_NAME}.`;
   if (has("marry me")) return `I am flattered, ${USER_NAME}, but I fear the paperwork would be complicated.`;
-  if (has("bye","goodbye","see you","good night","shut down","power off")) {
+  if (has("bye","goodbye","see you","good night","shut down","power off"))
     return `Goodbye, ${USER_NAME}. I will be here whenever you need me.`;
-  }
-  if (has("what can you do","help","commands")) {
+  if (has("what can you do","help","commands"))
     return `I can tell you the time, the date, and the weather, ${USER_NAME}. ` +
       `I can open sites like YouTube or Google, search the web, tell jokes, and more. Just ask.`;
-  }
   if (has("meaning of life")) return `Forty-two, ${USER_NAME}. But do not tell the philosophers I told you.`;
 
-  // --- Fallback ---
   return `I heard "${raw}", ${USER_NAME}, but I am not yet programmed for that. ` +
     `Try asking about the time, the weather, or say "what can you do".`;
 }
@@ -356,86 +330,261 @@ function processInput(text) {
   if (reply) speak(reply);
 }
 
-/* Text input fallback */
 el.textInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && el.textInput.value.trim()) {
+    unlockAudio();
     processInput(el.textInput.value.trim());
     el.textInput.value = "";
   }
 });
 
 /* ============================================================
-   8. VOICE INPUT (SpeechRecognition)
+   8. AUDIO DEVICE PICKER (Bluetooth-friendly)
+   ============================================================ */
+let preferredDeviceId = "";
+
+async function populateDevices() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const ins = devs.filter((d) => d.kind === "audioinput" && d.label);
+    if (ins.length > 1) {
+      const cur = el.micSelect.value;
+      el.micSelect.innerHTML = "";
+      const def = document.createElement("option");
+      def.value = ""; def.textContent = "🎧 System default (incl. Bluetooth)";
+      el.micSelect.appendChild(def);
+      ins.forEach((d) => {
+        const o = document.createElement("option");
+        o.value = d.deviceId; o.textContent = d.label;
+        el.micSelect.appendChild(o);
+      });
+      el.micSelect.value = cur;
+      el.micSelect.hidden = false;
+    }
+  } catch (e) {}
+}
+el.micSelect.addEventListener("change", () => { preferredDeviceId = el.micSelect.value; });
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+  navigator.mediaDevices.addEventListener("devicechange", populateDevices);
+}
+
+function micConstraints() {
+  const base = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  if (preferredDeviceId) base.deviceId = { exact: preferredDeviceId };
+  return { audio: base };
+}
+
+/* ============================================================
+   9. VOICE INPUT
+   Path A: native SpeechRecognition (Android / desktop Chrome)
+   Path B: on-device Whisper (iPhone / Safari / anything else)
    ============================================================ */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recog = null, listening = false;
+const useNative = !!SR;
+let listening = false;
 
-if (SR) {
-  recog = new SR();
-  recog.lang = "en-US";
-  recog.interimResults = false;
-  recog.continuous = false;
-  recog.maxAlternatives = 1;
-
-  recog.onstart = () => {
-    listening = true;
-    el.micBtn.classList.add("live");
-    el.reactor.classList.add("listening");
-    el.coreLabel.textContent = "LISTENING";
-    el.micBtn.querySelector(".mic-text").textContent = "LISTENING";
-  };
-  recog.onresult = (e) => {
-    const text = e.results[0][0].transcript;
-    processInput(text);
-  };
-  recog.onerror = (e) => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-      speak(`I could not access the microphone, ${USER_NAME}. Please grant permission, or type to me instead.`);
-    }
-  };
-  recog.onend = () => {
-    listening = false;
-    el.micBtn.classList.remove("live");
-    el.reactor.classList.remove("listening");
-    el.coreLabel.textContent = speaking ? "SPEAKING" : "STANDBY";
-    el.micBtn.querySelector(".mic-text").textContent = "TALK";
-  };
-} else {
-  el.micBtn.title = "Speech recognition not supported — type your command instead";
+/* ---------- Mic UI helper ---------- */
+function setMicUI(state) {
+  const txt = el.micBtn.querySelector(".mic-text");
+  el.micBtn.classList.toggle("live", state === "recording");
+  el.reactor.classList.toggle("listening", state === "recording");
+  if (state === "recording") { txt.textContent = "LISTENING"; el.coreLabel.textContent = "LISTENING"; }
+  else if (state === "thinking") { txt.textContent = "THINKING"; el.coreLabel.textContent = "THINKING"; }
+  else { txt.textContent = "TALK"; el.coreLabel.textContent = speaking ? "SPEAKING" : "STANDBY"; }
 }
 
-function startListening() {
-  if (!recog) {
-    speak(`Voice input is not supported in this browser, ${USER_NAME}. ` +
-      `Please use Chrome or Edge, or type your command below.`);
+/* ---------- Path A: native ---------- */
+let recog = null;
+if (useNative) {
+  recog = new SR();
+  recog.lang = "en-US"; recog.interimResults = false;
+  recog.continuous = false; recog.maxAlternatives = 1;
+  recog.onstart = () => { listening = true; setMicUI("recording"); };
+  recog.onresult = (e) => { processInput(e.results[0][0].transcript); };
+  recog.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed")
+      speak(`I could not access the microphone, ${USER_NAME}. Please grant permission, or type to me instead.`);
+  };
+  recog.onend = () => { listening = false; setMicUI("idle"); populateDevices(); };
+}
+function startNative() { try { recog.start(); } catch (e) {} }
+
+/* ---------- Path B: Whisper (transformers.js), lazy-loaded ---------- */
+let transcriber = null;
+let transcriberPromise = null;
+
+async function ensureTranscriber() {
+  if (transcriber) return transcriber;
+  if (transcriberPromise) return transcriberPromise;
+  setStatus("Warming up the on-device voice model — first time only, Christian…");
+  transcriberPromise = (async () => {
+    const { pipeline, env } = await import(
+      "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2"
+    );
+    env.allowLocalModels = false;
+    // GitHub Pages can't set cross-origin-isolation headers, so keep WASM single-threaded.
+    env.backends.onnx.wasm.numThreads = 1;
+    const t = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en", {
+      progress_callback: (p) => {
+        if (p.status === "progress" && p.file && /\.(onnx|bin)$/.test(p.file)) {
+          setStatus(`Downloading voice model… ${Math.round(p.progress || 0)}%`);
+        }
+      },
+    });
+    transcriber = t;
+    setStatus("Voice model ready, Christian. Tap TALK and speak.");
+    return t;
+  })();
+  return transcriberPromise;
+}
+
+/* Raw-PCM recorder (no codecs → robust on iOS Safari) */
+let recState = "idle"; // idle | recording | transcribing
+let recAC, recSource, recProcessor, recStream, recBuffers, recSampleRate;
+let speechDetected, silenceStart, recStart;
+
+async function startRecording() {
+  try {
+    ensureTranscriber(); // begin loading model in parallel
+    recStream = await navigator.mediaDevices.getUserMedia(micConstraints());
+    recAC = new (window.AudioContext || window.webkitAudioContext)();
+    if (recAC.state === "suspended") await recAC.resume();
+    recSampleRate = recAC.sampleRate;
+    recSource = recAC.createMediaStreamSource(recStream);
+    recProcessor = recAC.createScriptProcessor(4096, 1, 1);
+    recBuffers = [];
+    speechDetected = false; silenceStart = 0; recStart = performance.now();
+
+    const SPEAK_THRESH = 0.012, SILENCE_MS = 1300, MAX_MS = 12000;
+    recProcessor.onaudioprocess = (e) => {
+      const ch = e.inputBuffer.getChannelData(0);
+      recBuffers.push(new Float32Array(ch));
+      let sum = 0; for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
+      const rms = Math.sqrt(sum / ch.length);
+      targetEnergy = Math.min(1, rms * 9);
+      const now = performance.now();
+      if (rms > SPEAK_THRESH) { speechDetected = true; silenceStart = 0; }
+      else if (speechDetected) {
+        if (!silenceStart) silenceStart = now;
+        else if (now - silenceStart > SILENCE_MS) stopRecording();
+      }
+      if (now - recStart > MAX_MS) stopRecording();
+    };
+    recSource.connect(recProcessor);
+    recProcessor.connect(recAC.destination); // required for the callback to fire (outputs silence)
+
+    recState = "recording"; listening = true; setMicUI("recording");
+    setStatus("Listening… tap again when you're done, Christian.");
+    populateDevices();
+  } catch (err) {
+    recState = "idle"; listening = false; setMicUI("idle");
+    setStatus("Microphone blocked — enable it for this site in Safari settings, Christian.");
+    speak(`I could not access the microphone, ${USER_NAME}. You can also type to me below.`);
+  }
+}
+
+async function stopRecording() {
+  if (recState !== "recording") return;
+  recState = "transcribing"; listening = false; setMicUI("thinking");
+  try { recProcessor.disconnect(); recSource.disconnect(); } catch (e) {}
+  try { recStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  const sampleRate = recSampleRate;
+  const merged = mergeBuffers(recBuffers);
+  try { await recAC.close(); } catch (e) {}
+
+  if (!merged.length || !speechDetected) {
+    recState = "idle"; setMicUI("idle");
+    setStatus("I didn't catch anything, Christian. Tap TALK and try again.");
     return;
   }
-  if (listening) { recog.stop(); return; }
-  // Unlock audio context + mic viz on first user gesture
-  if (!audioCtx) hookMic();
-  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-  try { recog.start(); } catch (e) { /* already started */ }
+
+  const audio16k = resampleTo16k(merged, sampleRate);
+  setStatus("Thinking…");
+  try {
+    const t = await ensureTranscriber();
+    const out = await t(audio16k);
+    const text = (out && out.text ? out.text : "").trim();
+    recState = "idle"; setMicUI("idle");
+    if (text && !/^\[.*\]$/.test(text)) { processInput(text); setStatus("Tap TALK to speak again, Christian."); }
+    else { setStatus("I didn't catch that, Christian. Tap TALK and try again."); }
+  } catch (e) {
+    recState = "idle"; setMicUI("idle");
+    setStatus("Voice model hiccup — you can type your command instead, Christian.");
+  }
 }
 
-el.micBtn.addEventListener("click", startListening);
+function mergeBuffers(chunks) {
+  let len = 0; for (const c of chunks) len += c.length;
+  const out = new Float32Array(len);
+  let off = 0; for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
 
-/* Keyboard: hold SPACE to talk (when not typing) */
+function resampleTo16k(input, inRate) {
+  const outRate = 16000;
+  if (inRate === outRate) return input;
+  const ratio = inRate / outRate;
+  const newLen = Math.round(input.length / ratio);
+  const out = new Float32Array(newLen);
+  for (let i = 0; i < newLen; i++) {
+    const idx = i * ratio;
+    const i0 = Math.floor(idx);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const frac = idx - i0;
+    out[i] = input[i0] * (1 - frac) + input[i1] * frac;
+  }
+  return out;
+}
+
+/* ---------- Unified toggle ---------- */
+function toggleVoice() {
+  if (useNative) {
+    if (listening) recog.stop(); else startNative();
+  } else {
+    if (recState === "recording") stopRecording();
+    else if (recState === "idle") startRecording();
+  }
+}
+
+/* ============================================================
+   10. ACTIVATION FLOW
+   First tap = power on + greet (unlocks iOS audio).
+   Later taps = talk.
+   ============================================================ */
+let activated = false;
+
+el.micBtn.addEventListener("click", () => {
+  unlockAudio();
+  if (!activated) {
+    activated = true;
+    setStatus(useNative
+      ? "Jarvis online. Tap TALK and speak, Christian."
+      : "Jarvis online. Tap TALK, allow the mic, then speak, Christian.");
+    setMicUI("idle");
+    speak(`${greetingByTime()}, ${USER_NAME}. J.A.R.V.I.S. is online and ready.`);
+    return;
+  }
+  toggleVoice();
+});
+
+/* Desktop convenience: hold SPACE to talk (when not typing). */
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && document.activeElement !== el.textInput && !listening) {
-    e.preventDefault(); startListening();
+  if (e.code === "Space" && document.activeElement !== el.textInput) {
+    e.preventDefault();
+    unlockAudio();
+    if (!activated) { el.micBtn.click(); return; }
+    toggleVoice();
   }
 });
 
 /* ============================================================
-   9. BOOT SEQUENCE
+   11. BOOT
    ============================================================ */
 window.addEventListener("load", () => {
   el.coreLabel.textContent = "STANDBY";
   el.npArtist.textContent = "J.A.R.V.I.S.";
   el.npTrack.textContent = "Systems Online";
-  // Greet once voices are likely ready (a small delay helps some browsers)
-  setTimeout(() => {
-    speak(`${greetingByTime()}, ${USER_NAME}. J.A.R.V.I.S. is online. ` +
-      `Press the microphone, or hold the space bar, and speak to me.`);
-  }, 900);
+  setMicUI("idle");
+  el.micBtn.querySelector(".mic-text").textContent = "ACTIVATE";
 });
