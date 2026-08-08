@@ -300,7 +300,11 @@ function speak(text, onDone) {
 
   // --- 2. Premium path: ElevenLabs, when a key is configured.
   if (getElevenKey()) {
-    speakEleven(text, guard, finish).catch(() => speakBuiltIn(text, guard, finish));
+    speakEleven(text, guard, finish).catch((err) => {
+      addLine("jarvis", "[voice] cinematic voice unavailable (" +
+        (err && err.message ? err.message : "error") + ") — using the built-in voice.");
+      speakBuiltIn(text, guard, finish);
+    });
     return;
   }
   speakBuiltIn(text, guard, finish);
@@ -417,23 +421,77 @@ async function speakEleven(text, guard, finish) {
     throw new Error("eleven http " + res.status);
   }
 
-  const buf = await res.arrayBuffer();
-  const audio = await new Promise((resolve, reject) => {
-    // Callback form: Safari's decodeAudioData doesn't always return a promise.
-    try { toneCtx.decodeAudioData(buf, resolve, reject); } catch (e) { reject(e); }
-  });
+  // Play through the <audio> element: this is the route iOS keeps audible
+  // even when the ringer is switched off.
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  clearTimeout(guard);
 
-  clearTimeout(guard);                             // real duration is known now
-  const src = toneCtx.createBufferSource();
-  src.buffer = audio;
-  const analyser = toneCtx.createAnalyser();
-  analyser.fftSize = 256;
-  src.connect(analyser); analyser.connect(toneCtx.destination);
-  elevenAnalyser = analyser; elevenSource = src;
-  src.onended = () => { if (elevenSource === src) elevenSource = null; finish(); };
-  src.start();
-  // Belt and braces: finish even if onended never fires.
-  setTimeout(finish, (audio.duration + 0.6) * 1000);
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      ok ? resolve() : reject(new Error("media playback failed"));
+    };
+    mediaEl.onended = () => { URL.revokeObjectURL(url); finish(); done(true); };
+    mediaEl.onerror = () => { done(false); };
+    // If it plays at all, the promise resolves once playback actually starts;
+    // finish() is driven by 'ended' above.
+    mediaEl.onplaying = () => { settled = true; resolve(); };
+    // Never hang: fall back if playback doesn't begin promptly.
+    setTimeout(() => { if (!settled) done(false); }, 4000);
+    // Guarantee the animation ends even if 'ended' never fires.
+    mediaEl.onloadedmetadata = () => {
+      const ms = (isFinite(mediaEl.duration) ? mediaEl.duration + 0.6 : 12) * 1000;
+      setTimeout(finish, ms);
+    };
+    try {
+      mediaEl.src = url;
+      const p = mediaEl.play();
+      if (p && p.catch) p.catch(() => done(false));
+    } catch (e) { done(false); }
+  });
+}
+
+/* ============================================================
+   MEDIA PLAYER — the route that survives iPhone Silent Mode.
+
+   iOS silences Web Audio and speech synthesis when the ringer is off, but
+   NOT <audio>/<video> media playback (which is why music and videos still
+   play). ElevenLabs audio therefore goes through a real <audio> element,
+   primed during the first tap so iOS treats it as user-initiated.
+   ============================================================ */
+const mediaEl = new Audio();
+mediaEl.setAttribute("playsinline", "");
+mediaEl.setAttribute("webkit-playsinline", "");
+mediaEl.preload = "auto";
+mediaEl.style.display = "none";
+// iOS is more reliable when the element is actually in the document.
+try { document.body.appendChild(mediaEl); } catch (e) {}
+let mediaPrimed = false;
+
+/* A fraction of a second of silence, used to "arm" the element in a gesture. */
+function silentWavUrl() {
+  const sr = 8000, n = 800;                      // 0.1s
+  const b = new ArrayBuffer(44 + n * 2), v = new DataView(b);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+  return URL.createObjectURL(new Blob([b], { type: "audio/wav" }));
+}
+
+function primeMedia() {
+  if (mediaPrimed) return;
+  mediaPrimed = true;
+  try {
+    mediaEl.src = silentWavUrl();
+    const p = mediaEl.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
 }
 
 /* iOS requires a user gesture to unlock audio output. */
@@ -775,6 +833,7 @@ let activated = false;
    Tapping anywhere on the screen counts, so the tap can never "miss". */
 function onReactorTap() {
   if (longPressed) { longPressed = false; return; }  // that press opened settings
+  primeMedia();      // must happen inside the gesture
   unlockAudio();
   if (!activated) {
     activated = true;
