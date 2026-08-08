@@ -68,6 +68,36 @@ Open questions are answered from **Wikipedia** live (free, no API key), so the
 range of things he knows is very wide. When nothing matches, he says so rather
 than inventing an answer.
 
+### Real AI brain via Claude (optional, paid)
+
+Add an [Anthropic API key](https://console.anthropic.com) and open questions go
+to **Claude** instead of Wikipedia — real conversation, follow-up questions,
+writing, reasoning, opinions. Jarvis keeps the last few exchanges as context, so
+"what did I just tell you?" works.
+
+**Setup:** press and hold the circle, paste a key starting `sk-ant-`. The same
+box takes the ElevenLabs key (`sk_…`) — it routes by prefix.
+
+Details:
+
+- Claude answers with the Jarvis persona, addressed to Christian, in one to
+  three spoken sentences (no markdown — it's read aloud).
+- It's given the current date, time and weather, so it answers those naturally.
+- **Local commands never reach the API** — time, maths, timers, dice, opening
+  sites and the weather are answered instantly and for free on-device.
+- If the key is rejected, the rate limit is hit, or the network fails, Jarvis
+  falls back to Wikipedia and says why.
+
+> **Cost:** unlike the Wikipedia path, the Anthropic API is **pay-as-you-go with
+> no free tier** — you are billed per token. Short voice replies are cheap, but
+> it is not free. Set a spend limit in the Anthropic console.
+>
+> **Key exposure:** the key is stored only in this browser's `localStorage` and
+> sent only to Anthropic. Never hard-code it into these files — this site is
+> public. Calling the API from a browser also means anyone with access to your
+> unlocked device can read the key; treat it like a password and rotate it if in
+> doubt.
+
 ### Things to say
 
 | Say… | Jarvis does… |

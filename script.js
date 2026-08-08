@@ -721,6 +721,104 @@ function tryChance(q) {
 }
 
 /* ============================================================
+   7a-2. REAL AI BRAIN — Claude (Anthropic Messages API)
+
+   Optional. The key lives ONLY in this browser's localStorage; it is never
+   committed to the repo. Without a key, Jarvis falls back to the local
+   skills above plus Wikipedia.
+   ============================================================ */
+const AI_KEY_STORE = "jarvis_anthropic_key";
+const AI_MODEL = "claude-opus-5";
+const AI_MAX_HISTORY = 12;          // 6 exchanges of context
+const aiHistory = [];               // [{role, content}]
+
+function getAiKey() { try { return localStorage.getItem(AI_KEY_STORE) || ""; } catch (e) { return ""; } }
+function setAiKey(k) {
+  try {
+    if (k) localStorage.setItem(AI_KEY_STORE, k.trim());
+    else localStorage.removeItem(AI_KEY_STORE);
+  } catch (e) {}
+}
+
+/* Live context so Claude can answer about time, date and weather naturally. */
+function aiSystemPrompt() {
+  const n = new Date();
+  const when = `${DAYS[n.getDay()]}, ${MONTHS[n.getMonth()]} ${n.getDate()}, ${n.getFullYear()}, ` +
+    `${n.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  const wx = weatherState
+    ? `${weatherState.temp} degrees and ${weatherState.cond.toLowerCase()} in ${weatherState.label}`
+    : "unavailable";
+  return [
+    `You are J.A.R.V.I.S., ${USER_NAME}'s personal AI assistant, in the style of the Iron Man films:`,
+    `composed, dry, quietly witty, unfailingly loyal. Address him as ${USER_NAME}.`,
+    ``,
+    `Your replies are spoken aloud, so: keep them to one to three sentences.`,
+    `No markdown, no bullet points, no lists, no emoji, no headings — plain spoken prose only.`,
+    `Never narrate what you are about to do; just answer. If you do not know, say so plainly.`,
+    ``,
+    `Current context you may use when relevant:`,
+    `- Date and time: ${when}`,
+    `- Weather: ${wx}`,
+  ].join("\n");
+}
+
+async function askClaude(text) {
+  const key = getAiKey();
+  if (!key) throw new Error("no key");
+
+  aiHistory.push({ role: "user", content: text });
+  while (aiHistory.length > AI_MAX_HISTORY) aiHistory.shift();
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      // Required for calling the API directly from a browser.
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: AI_MODEL,
+      max_tokens: 2048,            // room for thinking + the spoken reply
+      output_config: { effort: "low" },   // low latency; strong on this model
+      system: aiSystemPrompt(),
+      messages: aiHistory,
+    }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      setAiKey("");
+      setStatus("That Claude key was rejected — using the built-in brain, Christian.");
+    } else if (res.status === 429) {
+      setStatus("Claude rate limit reached — using the built-in brain, Christian.");
+    }
+    aiHistory.pop();
+    throw new Error("claude http " + res.status);
+  }
+
+  const data = await res.json();
+
+  // Safety classifiers can decline: HTTP 200 with stop_reason "refusal".
+  if (data.stop_reason === "refusal") {
+    aiHistory.pop();
+    return `I'd rather not answer that one, ${USER_NAME}.`;
+  }
+
+  // Thinking blocks come back with empty text — take the text blocks only.
+  const reply = (data.content || [])
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join(" ")
+    .trim();
+
+  if (!reply) { aiHistory.pop(); throw new Error("empty reply"); }
+  aiHistory.push({ role: "assistant", content: reply });
+  return reply;
+}
+
+/* ============================================================
    7b. KNOWLEDGE — live Wikipedia lookup (free, no API key)
    ============================================================ */
 function trimToSentences(text, max) {
@@ -862,8 +960,20 @@ async function processInput(text) {
 
     if (typeof reply === "string") { speak(reply); return; }
 
-    // Open-ended question → Wikipedia.
     el.coreLabel.textContent = "THINKING";
+
+    // Open-ended question → Claude when configured, else Wikipedia.
+    if (getAiKey()) {
+      setStatus("Thinking, Christian…");
+      try {
+        speak(await askClaude(text));
+        return;
+      } catch (err) {
+        addLine("jarvis", "[ai] Claude unavailable (" +
+          (err && err.message ? err.message : "error") + ") — falling back.");
+      }
+    }
+
     setStatus("Looking that up, Christian…");
     const topic = topicFromQuestion(text);
     const found = await wikiLookup(topic);
@@ -1142,30 +1252,47 @@ document.addEventListener("pointerdown", () => {
   document.addEventListener(evt, () => { clearTimeout(pressTimer); })
 );
 
+/* One box for both keys — routed by prefix.
+   sk-ant-… → Claude (the AI brain);  anything else → ElevenLabs (the voice). */
 function promptElevenKey() {
-  const current = getElevenKey();
-  const msg = current
-    ? "ElevenLabs key is set. Paste a new key to replace it, or clear the box and press OK to remove it."
-    : "Paste your ElevenLabs API key for the cinematic voice.\nIt is stored only on this device.";
-  const entered = window.prompt(msg, current ? "" : "");
+  const have = [];
+  if (getElevenKey()) have.push("voice");
+  if (getAiKey()) have.push("AI brain");
+  const msg =
+    "Paste a key, Christian.\n\n" +
+    "• sk-ant-…  → Claude, the AI brain\n" +
+    "• sk_…      → ElevenLabs, the cinematic voice\n\n" +
+    (have.length ? "Currently set: " + have.join(" + ") + ".\n" : "") +
+    "Leave empty and press OK to remove both. Stored only on this device.";
+  const entered = window.prompt(msg, "");
   if (entered === null) return;                 // cancelled
   const k = entered.trim();
-  setElevenKey(k);
-  if (k) {
-    setStatus("Cinematic voice enabled, Christian.");
-    speak("Voice module upgraded. How may I assist you, Christian?");
+
+  if (!k) {
+    setElevenKey(""); setAiKey("");
+    setStatus("Keys removed — using the built-in voice and brain, Christian.");
+    return;
+  }
+  if (/^sk-ant-/i.test(k)) {
+    setAiKey(k);
+    setStatus("AI brain connected, Christian.");
+    speak(`Intelligence module online. What would you like to know, ${USER_NAME}?`);
   } else {
-    setStatus("Cinematic voice removed — using the built-in voice, Christian.");
+    setElevenKey(k);
+    setStatus("Cinematic voice enabled, Christian.");
+    speak(`Voice module upgraded. How may I assist you, ${USER_NAME}?`);
   }
 }
 
-/* Allow #key=... in the URL, then strip it so it isn't left in history. */
-(function readKeyFromHash() {
-  const m = /[#&]key=([^&]+)/.exec(location.hash || "");
-  if (m) {
-    setElevenKey(decodeURIComponent(m[1]));
-    history.replaceState(null, "", location.pathname + location.search);
-  }
+/* Allow #key=… (voice) and #ai=… (brain) in the URL, then strip them
+   so the keys aren't left sitting in browser history. */
+(function readKeysFromHash() {
+  const hash = location.hash || "";
+  const voice = /[#&]key=([^&]+)/.exec(hash);
+  const brain = /[#&]ai=([^&]+)/.exec(hash);
+  if (voice) setElevenKey(decodeURIComponent(voice[1]));
+  if (brain) setAiKey(decodeURIComponent(brain[1]));
+  if (voice || brain) history.replaceState(null, "", location.pathname + location.search);
 })();
 
 /* Desktop convenience: press SPACE to talk. */
