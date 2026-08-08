@@ -78,6 +78,25 @@ How it works on iPhone:
 > The **first** time you use voice on iPhone, a small (~40 MB) voice model
 > downloads once and is then cached. Give it a few seconds. After that it's fast.
 
+## The J.A.R.V.I.S. voice 🎩
+
+Jarvis speaks with a calm, refined **British male** voice to match the films —
+on iPhone that's Apple's **Daniel** (en-GB), delivered slightly slower and
+lower-pitched for the dry-butler feel.
+
+**Make it sound much better (iPhone, one time):** download the high-quality
+version of the voice —
+
+> **Settings → Accessibility → Spoken Content → Voices → English (UK) → Daniel**
+> → tap **Enhanced** (or **Premium**) to download it.
+
+Jarvis picks that up automatically the next time it speaks. The difference is
+significant: the default voice is noticeably more robotic.
+
+> Note: this is the closest match available from built-in browser speech. The
+> actual film voice (Paul Bettany) isn't something any browser ships, and
+> cloning a real actor's voice isn't something this project does.
+
 ## Bluetooth speakers & microphones 🎧
 
 Jarvis uses your device's **system audio route**, so when you connect Bluetooth

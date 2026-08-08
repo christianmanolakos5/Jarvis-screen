@@ -218,17 +218,34 @@ function addLine(who, text) {
 let muted = false;
 let preferredVoice = null;
 
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+/* The J.A.R.V.I.S. voice: a calm, refined British male.
+   Ranked best-match first — Apple (iOS/macOS), then Google, then Microsoft. */
+const JARVIS_VOICES = [
+  "Daniel (Enhanced)", "Daniel (Premium)", "Daniel",   // iOS/macOS en-GB male — closest match
+  "Arthur", "Oliver", "Jamie (Enhanced)", "Jamie",
+  "Google UK English Male",                            // Chrome en-GB male
+  "Microsoft George - English (United Kingdom)", "Microsoft Ryan Online (Natural) - English (United Kingdom)",
+  "Microsoft George", "Microsoft Ryan",
+];
+
 function pickVoice() {
   const voices = speechSynthesis.getVoices();
   if (!voices.length) return;
-  // Names that exist on iOS/Safari first, then desktop Chrome.
-  const prefs = ["Daniel","Arthur","Aaron","Google UK English Male","Microsoft Ryan",
-    "Microsoft Guy","Google UK English","Alex","Samantha","Microsoft David"];
-  for (const name of prefs) {
+
+  // 1. Exact match on a known British male voice, in preference order.
+  for (const name of JARVIS_VOICES) {
     const v = voices.find((x) => x.name === name);
     if (v) { preferredVoice = v; return; }
   }
-  // Prefer an on-device (local) English voice — remote voices can fail silently on iOS.
+  // 2. Any en-GB voice that isn't obviously female.
+  const FEMALE = /martha|kate|serena|stephanie|libby|sonia|hazel|female|samantha|karen|moira|tessa|fiona/i;
+  const british = voices.filter((v) => v.lang && /^en[-_]GB/i.test(v.lang));
+  const britishMale = british.find((v) => !FEMALE.test(v.name));
+  if (britishMale || british.length) { preferredVoice = britishMale || british[0]; return; }
+  // 3. Fall back to any on-device English voice.
   preferredVoice =
     voices.find((v) => v.lang && v.lang.startsWith("en") && v.localService) ||
     voices.find((v) => v.lang && v.lang.startsWith("en")) ||
@@ -269,11 +286,16 @@ function speak(text, onDone) {
     if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
 
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-US";
-    u.rate = 1.0; u.pitch = 0.9; u.volume = 1;
-    // Assigning a bad/remote voice can throw or go silent — never fatal.
+    u.lang = "en-GB";               // British, to match the J.A.R.V.I.S. voice
+    u.rate = 0.92;                  // unhurried and composed
+    u.pitch = 0.85;                 // a touch lower — dry, measured butler
+    u.volume = 1;
+    // Assigning a bad voice can throw or go silent — never fatal.
+    // Remote voices misbehave on iOS specifically, so only skip them there.
     try {
-      if (preferredVoice && preferredVoice.localService !== false) u.voice = preferredVoice;
+      if (preferredVoice && (!IS_IOS || preferredVoice.localService !== false)) {
+        u.voice = preferredVoice;
+      }
     } catch (e) {}
     u.onstart = () => { speaking = true; el.reactor.classList.add("speaking"); el.coreLabel.textContent = "SPEAKING"; };
     u.onend = () => { clearTimeout(guard); finish(); };
