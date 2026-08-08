@@ -45,6 +45,29 @@ Then **allow microphone** (and optionally location) when prompted.
 - Or type a command in the box and press Enter.
 - Toggle Jarvis's voice with the **🔊** button.
 
+## Hands-free conversation
+
+**Tap the circle once** and Jarvis stays in conversation: he greets you,
+listens, answers, then listens again — no more tapping. Say **"stop"** or
+**"goodbye"**, or tap the circle again, to end it. After three silent turns he
+stands down on his own.
+
+## What he can answer
+
+Beyond the fixed commands, Jarvis reasons and looks things up:
+
+| Ask | Example |
+|---|---|
+| **Maths** | "what is 15 times 4", "20 percent of 80", "square root of 144" |
+| **Timers** | "set a timer for 5 minutes" |
+| **Date maths** | "how many days until Christmas" |
+| **Chance** | "flip a coin", "roll a dice", "random number between 1 and 10" |
+| **Anything else** | "who is Albert Einstein", "tell me about the Eiffel Tower" |
+
+Open questions are answered from **Wikipedia** live (free, no API key), so the
+range of things he knows is very wide. When nothing matches, he says so rather
+than inventing an answer.
+
 ### Things to say
 
 | Say… | Jarvis does… |

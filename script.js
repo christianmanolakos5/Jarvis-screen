@@ -18,6 +18,9 @@ let pressTimer = null;   // long-press timer (opens voice settings)
 let longPressed = false; // suppresses the tap that ended a long press
 let elevenAnalyser = null; // real-audio analyser (drives the beat animation)
 let elevenSource = null;   // currently playing ElevenLabs audio
+let conversing = false;    // hands-free conversation loop is running
+let silenceStreak = 0;     // consecutive turns where nothing was heard
+let processing = false;    // an answer is being worked out
 
 /* ---------- Element refs ---------- */
 const $ = (id) => document.getElementById(id);
@@ -287,6 +290,7 @@ function speak(text, onDone) {
     el.coreLabel.textContent = listening ? "LISTENING" : "STANDBY";
     targetEnergy = 0.2;
     if (onDone) onDone();
+    continueConversation();   // hands-free: reopen the mic after every reply
   };
   speaking = true;
   el.reactor.classList.add("speaking");
@@ -564,6 +568,196 @@ const COMPLIMENTS = [
 
 function openSite(url, name) { window.open(url, "_blank"); return `Opening ${name} for you, Christian.`; }
 
+/* ============================================================
+   7a. REASONING SKILLS — maths, timers, dates, chance
+   ============================================================ */
+const NUM_WORDS = {
+  zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9,
+  ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16,
+  seventeen:17, eighteen:18, nineteen:19, twenty:20, thirty:30, forty:40, fifty:50,
+  sixty:60, seventy:70, eighty:80, ninety:90, hundred:100, thousand:1000, million:1000000,
+};
+
+/* Safe arithmetic: tokenise then evaluate. No eval, no Function. */
+function calculate(expr) {
+  const tokens = expr.match(/\d+(\.\d+)?|[+\-*/%^()]/g);
+  if (!tokens) return null;
+  let i = 0;
+  const peek = () => tokens[i];
+  const eat = () => tokens[i++];
+  function parseExpr() {
+    let v = parseTerm();
+    while (peek() === "+" || peek() === "-") { const op = eat(); const r = parseTerm(); v = op === "+" ? v + r : v - r; }
+    return v;
+  }
+  function parseTerm() {
+    let v = parsePow();
+    while (peek() === "*" || peek() === "/" || peek() === "%") {
+      const op = eat(); const r = parsePow();
+      v = op === "*" ? v * r : op === "/" ? (r === 0 ? NaN : v / r) : v % r;
+    }
+    return v;
+  }
+  function parsePow() {
+    const base = parseUnary();
+    if (peek() === "^") { eat(); return Math.pow(base, parsePow()); }
+    return base;
+  }
+  function parseUnary() {
+    if (peek() === "-") { eat(); return -parseUnary(); }
+    return parseAtom();
+  }
+  function parseAtom() {
+    if (peek() === "(") { eat(); const v = parseExpr(); if (peek() === ")") eat(); return v; }
+    const t = eat();
+    return t === undefined ? NaN : parseFloat(t);
+  }
+  const result = parseExpr();
+  if (i < tokens.length || !isFinite(result)) return null;
+  return result;
+}
+
+function tidyNumber(n) {
+  const r = Math.round(n * 1e6) / 1e6;
+  return String(r);
+}
+
+/* "what is 15 times 4", "20% of 80", "2 plus 2" */
+function tryMath(q) {
+  if (!/[\d]/.test(q)) return null;
+
+  // percentage: "20 percent of 80"
+  const pct = q.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)\s*of\s*(\d+(?:\.\d+)?)/);
+  if (pct) {
+    const v = (parseFloat(pct[1]) / 100) * parseFloat(pct[2]);
+    return `${pct[1]} percent of ${pct[2]} is ${tidyNumber(v)}, Christian.`;
+  }
+  // square root
+  const sqrt = q.match(/square root of\s*(\d+(?:\.\d+)?)/);
+  if (sqrt) return `The square root of ${sqrt[1]} is ${tidyNumber(Math.sqrt(parseFloat(sqrt[1])))}, Christian.`;
+
+  // Only treat it as maths when it looks like a calculation.
+  if (!/(what|calculate|how much|equals?|=|\+|times|plus|minus|divided|multiplied|\*|\/|\^)/.test(q)) return null;
+
+  const normalised = q
+    .replace(/\bplus\b|\band\b/g, "+")
+    .replace(/\bminus\b|\bsubtract\b|\bless\b/g, "-")
+    .replace(/\btimes\b|\bmultiplied by\b|\bx\b/g, "*")
+    .replace(/\bdivided by\b|\bover\b/g, "/")
+    .replace(/\bto the power of\b|\bsquared\b/g, "^")
+    .replace(/[^0-9+\-*/%^().\s]/g, " ");
+
+  if (!/\d\s*[+\-*/%^]\s*\d/.test(normalised)) return null;
+  const value = calculate(normalised);
+  if (value === null || isNaN(value)) return null;
+  return `That comes to ${tidyNumber(value)}, Christian.`;
+}
+
+/* "set a timer for 5 minutes" */
+const timers = [];
+function tryTimer(q) {
+  const m = q.match(/(?:timer|alarm|remind me).*?(\d+|\w+)\s*(second|minute|hour)s?/);
+  if (!m) return null;
+  const raw = m[1];
+  const n = /^\d+$/.test(raw) ? parseInt(raw, 10) : NUM_WORDS[raw];
+  if (!n || n <= 0) return null;
+  const unit = m[2];
+  const ms = n * (unit === "second" ? 1000 : unit === "minute" ? 60000 : 3600000);
+  const id = setTimeout(() => {
+    speak(`Christian, your ${n} ${unit}${n > 1 ? "s" : ""} timer is up.`);
+  }, ms);
+  timers.push(id);
+  return `Timer set for ${n} ${unit}${n > 1 ? "s" : ""}, Christian. I will let you know.`;
+}
+
+/* "how many days until christmas" / a date */
+const HOLIDAYS = {
+  christmas: "12-25", "new year": "01-01", "new years": "01-01",
+  halloween: "10-31", "valentines": "02-14", "valentine's": "02-14",
+  "independence day": "07-04", "fourth of july": "07-04",
+};
+function tryCountdown(q) {
+  const m = q.match(/how (?:many days|long) (?:until|till|to)\s+(.+)/);
+  if (!m) return null;
+  const targetRaw = m[1].replace(/[?.!]/g, "").trim();
+  const now = new Date();
+  let target = null;
+
+  for (const [name, md] of Object.entries(HOLIDAYS)) {
+    if (targetRaw.includes(name)) {
+      const [mo, d] = md.split("-").map(Number);
+      target = new Date(now.getFullYear(), mo - 1, d);
+      if (target < now) target = new Date(now.getFullYear() + 1, mo - 1, d);
+      break;
+    }
+  }
+  if (!target) {
+    const parsed = new Date(targetRaw);
+    if (!isNaN(parsed.getTime())) target = parsed;
+  }
+  if (!target) return null;
+  const days = Math.ceil((target - now) / 86400000);
+  if (days < 0) return `${targetRaw} has already passed this year, Christian.`;
+  if (days === 0) return `${targetRaw} is today, Christian.`;
+  return `${days} day${days === 1 ? "" : "s"} until ${targetRaw}, Christian.`;
+}
+
+/* Chance: coin, dice, random number */
+function tryChance(q) {
+  if (/flip a coin|heads or tails|coin toss/.test(q))
+    return `${Math.random() < 0.5 ? "Heads" : "Tails"}, Christian.`;
+  const dice = q.match(/roll (?:a |the )?(?:(\d+)\s*)?(?:sided )?(?:dice|die|d(\d+))/);
+  if (dice) {
+    const sides = parseInt(dice[1] || dice[2] || "6", 10);
+    return `I rolled a ${1 + Math.floor(Math.random() * sides)}, Christian.`;
+  }
+  const rnd = q.match(/random number(?: between)?\s*(\d+)\s*(?:and|to|-)\s*(\d+)/);
+  if (rnd) {
+    const a = parseInt(rnd[1], 10), b = parseInt(rnd[2], 10);
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    return `${lo + Math.floor(Math.random() * (hi - lo + 1))}, Christian.`;
+  }
+  return null;
+}
+
+/* ============================================================
+   7b. KNOWLEDGE — live Wikipedia lookup (free, no API key)
+   ============================================================ */
+function trimToSentences(text, max) {
+  const parts = text.replace(/\s+/g, " ").split(/(?<=[.!?])\s+/);
+  let out = "";
+  for (const p of parts) {
+    if (out && (out + " " + p).length > max) break;
+    out = out ? out + " " + p : p;
+    if (out.length > max) break;
+  }
+  return out || text.slice(0, max);
+}
+
+async function wikiLookup(topic) {
+  const clean = topic.replace(/[?.!]/g, "").trim();
+  if (!clean) return null;
+  try {
+    // Find the best-matching article title.
+    const sUrl = "https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" +
+      encodeURIComponent(clean) + "&srlimit=1&format=json&origin=*";
+    const sRes = await fetch(sUrl);
+    if (!sRes.ok) return null;
+    const sData = await sRes.json();
+    const hit = sData && sData.query && sData.query.search && sData.query.search[0];
+    if (!hit) return null;
+
+    // Fetch its plain-language summary.
+    const pUrl = "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+      encodeURIComponent(hit.title.replace(/ /g, "_"));
+    const pRes = await fetch(pUrl);
+    if (!pRes.ok) return null;
+    const page = await pRes.json();
+    if (!page.extract || page.type === "disambiguation") return null;
+    return trimToSentences(page.extract, 320);
+  } catch (e) { return null; }
+}
+
 function greetingByTime() {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
@@ -576,6 +770,12 @@ function handleCommand(raw) {
   if (!q) return null;
   addLine("you", raw);
   const has = (...w) => w.some((x) => q.includes(x));
+  const word = (...w) => w.some((x) => new RegExp("\\b" + x + "\\b").test(q));
+
+  // --- Reasoning skills run FIRST, so "15 times 4" and "set a timer" are not
+  //     swallowed by loose keyword matches like "time". ---
+  const skill = tryMath(q) || tryTimer(q) || tryCountdown(q) || tryChance(q);
+  if (skill) return skill;
 
   if (has("hello","hi ","hey","jarvis","are you there","you there"))
     return `${greetingByTime()}, ${USER_NAME}. All systems are online and at your service.`;
@@ -586,7 +786,7 @@ function handleCommand(raw) {
   if (has("how are you","how do you do","you doing"))
     return `Running at full capacity and feeling quite intelligent, thank you for asking, ${USER_NAME}.`;
 
-  if (has("time")) {
+  if (word("time")) {
     const t = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     return `It is ${t}, ${USER_NAME}.`;
   }
@@ -630,13 +830,52 @@ function handleCommand(raw) {
       `I can open sites like YouTube or Google, search the web, tell jokes, and more. Just ask.`;
   if (has("meaning of life")) return `Forty-two, ${USER_NAME}. But do not tell the philosophers I told you.`;
 
-  return `I heard "${raw}", ${USER_NAME}, but I am not yet programmed for that. ` +
-    `Try asking about the time, the weather, or say "what can you do".`;
+  // --- Open questions: look it up ---
+  return { lookup: raw };
 }
 
-function processInput(text) {
-  const reply = handleCommand(text);
-  if (reply) speak(reply);
+/* Strip conversational wrapping so the lookup gets a clean topic. */
+function topicFromQuestion(raw) {
+  return raw
+    .replace(/^(hey |ok |okay )?jarvis[,\s]*/i, "")
+    .replace(/^(can you |could you |please )?(tell me|explain|describe)\s+(about\s+)?/i, "")
+    .replace(/^(do you know |i want to know )?(what|who|where|when|why|how)\s+(is|are|was|were|does|do|did)\s+/i, "")
+    .replace(/^(a|an|the)\s+/i, "")
+    .replace(/[?.!]+$/, "")
+    .trim();
+}
+
+async function processInput(text) {
+  // "Stop" ends the hands-free loop rather than starting another turn.
+  if (/\b(stop|goodbye|bye|good ?night|that'?s all|shut down|go to sleep|never ?mind|dismissed)\b/i.test(text)) {
+    addLine("you", text);
+    conversing = false;                     // prevents the loop from reopening
+    speak(`Goodbye, ${USER_NAME}. I will be here whenever you need me.`);
+    setStatus("Tap the circle to talk again.");
+    return;
+  }
+
+  processing = true;
+  try {
+    const reply = handleCommand(text);
+    if (!reply) return;
+
+    if (typeof reply === "string") { speak(reply); return; }
+
+    // Open-ended question → Wikipedia.
+    el.coreLabel.textContent = "THINKING";
+    setStatus("Looking that up, Christian…");
+    const topic = topicFromQuestion(text);
+    const found = await wikiLookup(topic);
+    if (found) {
+      speak(found);
+    } else {
+      speak(`I could not find anything on that, ${USER_NAME}. ` +
+        `Try rephrasing it, or ask me the time, the weather, or a calculation.`);
+    }
+  } finally {
+    processing = false;
+  }
 }
 
 /* ============================================================
@@ -671,12 +910,20 @@ if (useNative) {
   recog.lang = "en-US"; recog.interimResults = false;
   recog.continuous = false; recog.maxAlternatives = 1;
   recog.onstart = () => { listening = true; setMicUI("recording"); };
-  recog.onresult = (e) => { processInput(e.results[0][0].transcript); };
+  recog.onresult = (e) => { silenceStreak = 0; processInput(e.results[0][0].transcript); };
   recog.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed")
       speak(`I could not access the microphone, ${USER_NAME}. Please grant permission and tap the circle again.`);
   };
-  recog.onend = () => { listening = false; setMicUI("idle"); populateDevices(); };
+  recog.onend = () => {
+    listening = false; setMicUI("idle"); populateDevices();
+    // Hands-free: if nothing was said, reopen the mic for another turn.
+    if (conversing && !speaking && !processing) {
+      silenceStreak++;
+      if (silenceStreak >= 3) stopConversation("I'll be here when you need me, Christian.");
+      else continueConversation();
+    }
+  };
 }
 function startNative() { try { recog.start(); } catch (e) {} }
 
@@ -770,9 +1017,20 @@ async function stopRecording() {
 
   if (!merged.length || !speechDetected) {
     recState = "idle"; setMicUI("idle");
+    if (conversing) {
+      silenceStreak++;
+      if (silenceStreak >= 3) {
+        stopConversation("I'll be here when you need me, Christian.");
+      } else {
+        setStatus("Still listening, Christian — go ahead.");
+        continueConversation();
+      }
+      return;
+    }
     setStatus("I didn't catch anything, Christian. Tap the circle and try again.");
     return;
   }
+  silenceStreak = 0;
 
   const audio16k = resampleTo16k(merged, sampleRate);
   setStatus("Thinking…");
@@ -829,25 +1087,47 @@ function toggleVoice() {
    ============================================================ */
 let activated = false;
 
-/* ONE TAP: greet, then start listening automatically.
+/* ONE TAP starts a hands-free conversation: Jarvis greets you, listens,
+   answers, then listens again — no further tapping. Tap again to stop.
    Tapping anywhere on the screen counts, so the tap can never "miss". */
 function onReactorTap() {
   if (longPressed) { longPressed = false; return; }  // that press opened settings
   primeMedia();      // must happen inside the gesture
   unlockAudio();
-  if (!activated) {
+
+  if (!conversing) {
+    conversing = true;
     activated = true;
+    silenceStreak = 0;
     setMicUI("idle");
     el.coreLabel.textContent = "ONLINE";
-    setStatus("Listening right after the greeting — just speak, Christian.");
+    setStatus("Conversation on — just talk. Tap again to stop.");
     chime();
-    // Greet, then open the mic on its own: one tap does everything.
-    speak(`Hello ${USER_NAME}, how can I help you?`, () => {
-      if (!listening && recState !== "recording") toggleVoice();
-    });
+    speak(`Hello ${USER_NAME}, how can I help you?`);   // loop continues from finish()
     return;
   }
-  toggleVoice();
+  stopConversation("Standing by, Christian. Tap when you need me.");
+}
+
+function stopConversation(msg) {
+  conversing = false;
+  try { if (recog && listening) recog.stop(); } catch (e) {}
+  if (recState === "recording") { try { stopRecording(); } catch (e) {} }
+  try { mediaEl.pause(); } catch (e) {}
+  try { if (speechSynthesis.speaking) speechSynthesis.cancel(); } catch (e) {}
+  speaking = false;
+  el.reactor.classList.remove("speaking", "listening");
+  el.coreLabel.textContent = "STANDBY";
+  if (msg) { addLine("jarvis", msg); setStatus("Tap the circle to talk again."); }
+}
+
+/* Called whenever Jarvis stops talking: reopen the mic so you can just reply. */
+function continueConversation() {
+  if (!conversing) return;
+  if (listening || recState !== "idle" || speaking || processing) return;
+  setTimeout(() => {
+    if (conversing && !speaking && !listening && recState === "idle") toggleVoice();
+  }, 350);   // brief pause so the mic doesn't catch the tail of his own voice
 }
 
 /* Any tap on the page triggers it (pointerup fires reliably on iOS Safari). */
