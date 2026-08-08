@@ -287,7 +287,7 @@ function chime() {
 }
 
 /* Visible sound-engine status badge (so we can see what iOS is doing). */
-const BUILD = 7;
+const BUILD = 8;
 let badgeEl = null;
 function updateAudioBadge() {
   if (!badgeEl) return;
@@ -620,8 +620,10 @@ el.micBtn.addEventListener("click", () => {
     setMicUI("idle");
     el.coreLabel.textContent = "ONLINE";
     const st = toneCtx ? toneCtx.state : "—";
-    setStatus(`Sound engine: <b>${st}</b>. You should hear a chime and my voice now, Christian. ` +
-      `If not, press Volume Up while this page is open.`);
+    const nv = ("speechSynthesis" in window) ? speechSynthesis.getVoices().length : 0;
+    // Print the diagnostic into the visible console box, not just the hint line.
+    addLine("jarvis", `[sound check] engine: ${st} · voices: ${nv} — you should hear a chime now.`);
+    setStatus(`Sound engine: <b>${st}</b>. Press Volume Up if you hear nothing.`);
     chime();                                   // audible confirmation
     speak(`Hello ${USER_NAME}, how can I help you?`);
     return;
@@ -649,11 +651,12 @@ window.addEventListener("load", () => {
   setMicUI("idle");
   el.micBtn.querySelector(".mic-text").textContent = "ACTIVATE";
 
-  // Build/sound-status badge, fixed bottom-left, so state is always visible.
+  // Build/sound-status badge, fixed TOP-left (visible above Safari's toolbar).
   badgeEl = document.createElement("div");
   badgeEl.style.cssText =
-    "position:fixed;left:8px;bottom:6px;z-index:60;font-size:10px;" +
-    "color:#37c6f4;opacity:.8;font-family:monospace;pointer-events:none;";
+    "position:fixed;left:6px;top:calc(env(safe-area-inset-top) + 4px);z-index:60;" +
+    "font-size:10px;color:#7fe8ff;background:rgba(4,10,16,.7);padding:2px 6px;" +
+    "border-radius:6px;font-family:monospace;pointer-events:none;";
   document.body.appendChild(badgeEl);
   updateAudioBadge();
 });
