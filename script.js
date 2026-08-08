@@ -195,13 +195,19 @@ let preferredVoice = null;
 
 function pickVoice() {
   const voices = speechSynthesis.getVoices();
-  const prefs = ["Google UK English Male","Daniel","Arthur","Microsoft Ryan",
-    "Microsoft Guy","Google UK English","Alex","Microsoft David"];
+  if (!voices.length) return;
+  // Names that exist on iOS/Safari first, then desktop Chrome.
+  const prefs = ["Daniel","Arthur","Aaron","Google UK English Male","Microsoft Ryan",
+    "Microsoft Guy","Google UK English","Alex","Samantha","Microsoft David"];
   for (const name of prefs) {
     const v = voices.find((x) => x.name === name);
     if (v) { preferredVoice = v; return; }
   }
-  preferredVoice = voices.find((v) => v.lang && v.lang.startsWith("en")) || voices[0] || null;
+  // Prefer an on-device (local) English voice — remote voices can fail silently on iOS.
+  preferredVoice =
+    voices.find((v) => v.lang && v.lang.startsWith("en") && v.localService) ||
+    voices.find((v) => v.lang && v.lang.startsWith("en")) ||
+    voices[0] || null;
 }
 speechSynthesis.onvoiceschanged = pickVoice;
 pickVoice();
@@ -209,15 +215,27 @@ pickVoice();
 function speak(text) {
   addLine("jarvis", text);
   if (muted || !("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
+  // iOS Safari bug: cancel() must NOT be called blindly before speak(), or the
+  // engine goes silent. Only clear the queue if something is actually playing.
+  try {
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+  } catch (e) {}
   const u = new SpeechSynthesisUtterance(text);
-  if (preferredVoice) u.voice = preferredVoice;
+  u.lang = "en-US";
+  // Only assign an on-device voice; remote voices can produce no audio on iOS.
+  if (preferredVoice && preferredVoice.localService !== false) u.voice = preferredVoice;
   u.rate = 1.0; u.pitch = 0.9; u.volume = 1;
   u.onstart = () => { speaking = true; el.reactor.classList.add("speaking"); el.coreLabel.textContent = "SPEAKING"; targetEnergy = 0.9; };
   u.onend = () => { speaking = false; el.reactor.classList.remove("speaking"); el.coreLabel.textContent = listening ? "LISTENING" : "STANDBY"; targetEnergy = 0.2; };
   u.onboundary = () => { targetEnergy = 0.55 + Math.random() * 0.4; };
+  try { speechSynthesis.resume(); } catch (e) {}  // iOS can leave the engine paused
   speechSynthesis.speak(u);
 }
+
+// iOS pauses the speech engine unexpectedly; nudge it back while speaking.
+setInterval(() => {
+  try { if (speechSynthesis.speaking) speechSynthesis.resume(); } catch (e) {}
+}, 4000);
 
 el.muteBtn.addEventListener("click", () => {
   muted = !muted;
@@ -228,12 +246,37 @@ el.muteBtn.addEventListener("click", () => {
 
 /* iOS requires a user gesture to unlock audio output. */
 let audioUnlocked = false;
+let toneCtx = null;
 function unlockAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
+  // Web Audio context — used for the chime (media channel, ignores Silent Mode).
   try {
-    const u = new SpeechSynthesisUtterance(" ");
-    u.volume = 0; speechSynthesis.speak(u);
+    toneCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (toneCtx.state === "suspended") toneCtx.resume();
+  } catch (e) {}
+  // Wake the speech engine within the gesture (no cancel, no silent utterance).
+  try { speechSynthesis.resume(); } catch (e) {}
+}
+
+/* A short two-note chime so there is guaranteed audible feedback on tap.
+   Web Audio plays on the media channel, which is NOT muted by Silent Mode. */
+function chime() {
+  if (!toneCtx) return;
+  try {
+    if (toneCtx.state === "suspended") toneCtx.resume();
+    const t0 = toneCtx.currentTime;
+    [[660, 0], [990, 0.12]].forEach(([freq, delay]) => {
+      const o = toneCtx.createOscillator();
+      const g = toneCtx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      const start = t0 + delay;
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(0.25, start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+      o.connect(g); g.connect(toneCtx.destination);
+      o.start(start); o.stop(start + 0.24);
+    });
   } catch (e) {}
 }
 
@@ -558,10 +601,12 @@ el.micBtn.addEventListener("click", () => {
   unlockAudio();
   if (!activated) {
     activated = true;
+    setMicUI("idle");
+    el.coreLabel.textContent = "ONLINE";
     setStatus(useNative
       ? "Jarvis online. Tap TALK and speak, Christian."
       : "Jarvis online. Tap TALK, allow the mic, then speak, Christian.");
-    setMicUI("idle");
+    chime();                                   // audible confirmation
     speak(`Hello ${USER_NAME}, how can I help you?`);
     return;
   }
