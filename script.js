@@ -14,6 +14,10 @@ const USER_NAME = "Christian";
 let listening = false;   // mic is open
 let speaking = false;    // Jarvis is talking
 let recState = "idle";   // idle | recording | transcribing
+let pressTimer = null;   // long-press timer (opens voice settings)
+let longPressed = false; // suppresses the tap that ended a long press
+let elevenAnalyser = null; // real-audio analyser (drives the beat animation)
+let elevenSource = null;   // currently playing ElevenLabs audio
 
 /* ---------- Element refs ---------- */
 const $ = (id) => document.getElementById(id);
@@ -156,9 +160,23 @@ function drawViz() {
   const baseR = canvas.width * 0.30;
   const t = performance.now() / 1000;
 
-  // While Jarvis talks, drive the bars with a syllable-like rhythm so the
-  // circle visibly moves and glows to the beat of its voice.
-  if (speaking) {
+  // With ElevenLabs the real waveform drives the bars — true beat sync.
+  let realEnergy = -1;
+  if (elevenAnalyser) {
+    // Time-domain RMS tracks loudness directly, so the bars follow the actual
+    // volume of the voice (averaging FFT bins would dilute it).
+    const d = new Uint8Array(elevenAnalyser.fftSize);
+    elevenAnalyser.getByteTimeDomainData(d);
+    let sum = 0;
+    for (let i = 0; i < d.length; i++) { const v = (d[i] - 128) / 128; sum += v * v; }
+    realEnergy = Math.min(1, Math.sqrt(sum / d.length) * 3.2);
+  }
+  if (realEnergy > 0.02) {
+    targetEnergy = realEnergy;                 // move to the actual audio
+  }
+  // Otherwise simulate a syllable rhythm, so the circle always moves while
+  // talking even if the analyser is unavailable or the passage is quiet.
+  else if (speaking) {
     const syl = Math.abs(Math.sin(t * 7.3)) * 0.62      // syllable rate
               + Math.abs(Math.sin(t * 3.1 + 1.3)) * 0.26 // phrase swell
               + Math.abs(Math.sin(t * 13.7)) * 0.12;     // consonant chatter
@@ -264,6 +282,7 @@ function speak(text, onDone) {
     if (finished) return;
     finished = true;
     speaking = false;
+    elevenAnalyser = null;
     el.reactor.classList.remove("speaking");
     el.coreLabel.textContent = listening ? "LISTENING" : "STANDBY";
     targetEnergy = 0.2;
@@ -277,9 +296,18 @@ function speak(text, onDone) {
   const estMs = Math.max(1600, text.length * 70);
   const guard = setTimeout(finish, estMs);
 
-  if (muted || !("speechSynthesis" in window)) return;
+  if (muted) return;
 
-  // --- 2. Everything that touches the speech engine is guarded.
+  // --- 2. Premium path: ElevenLabs, when a key is configured.
+  if (getElevenKey()) {
+    speakEleven(text, guard, finish).catch(() => speakBuiltIn(text, guard, finish));
+    return;
+  }
+  speakBuiltIn(text, guard, finish);
+}
+
+function speakBuiltIn(text, guard, finish) {
+  if (!("speechSynthesis" in window)) return;
   try {
     // iOS Safari bug: cancel() must NOT be called blindly before speak(), or
     // the engine goes silent. Only clear the queue if something is playing.
@@ -309,6 +337,104 @@ function speak(text, onDone) {
 setInterval(() => {
   try { if (speechSynthesis.speaking) speechSynthesis.resume(); } catch (e) {}
 }, 4000);
+
+/* ============================================================
+   6b. ELEVENLABS VOICE (optional, far more cinematic)
+
+   The API key lives ONLY in this browser's localStorage — it is never
+   committed to the repo and never sent anywhere except ElevenLabs.
+   Set it by long-pressing the reactor, or by opening the page with
+   #key=YOUR_KEY (which is stripped from the URL immediately).
+   ============================================================ */
+const EL_KEY_STORE = "jarvis_eleven_key";
+const EL_VOICE_STORE = "jarvis_eleven_voice";
+// British male voices, best J.A.R.V.I.S. match first.
+const EL_VOICE_NAMES = ["George", "Daniel", "Brian", "Charlie"];
+const EL_VOICE_FALLBACK = "JBFqnCBsd6RMkjVDRZzb";  // "George" — warm British narrator
+/* elevenAnalyser / elevenSource are declared at the top of this file. */
+
+function getElevenKey() { try { return localStorage.getItem(EL_KEY_STORE) || ""; } catch (e) { return ""; } }
+function setElevenKey(k) {
+  try {
+    if (k) localStorage.setItem(EL_KEY_STORE, k.trim());
+    else { localStorage.removeItem(EL_KEY_STORE); localStorage.removeItem(EL_VOICE_STORE); }
+  } catch (e) {}
+}
+
+/* Resolve a British male voice id from the account, once, then cache it. */
+async function elevenVoiceId(key) {
+  try {
+    const cached = localStorage.getItem(EL_VOICE_STORE);
+    if (cached) return cached;
+  } catch (e) {}
+  try {
+    const r = await fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": key } });
+    if (r.ok) {
+      const data = await r.json();
+      const voices = data.voices || [];
+      for (const name of EL_VOICE_NAMES) {
+        const v = voices.find((x) => (x.name || "").toLowerCase() === name.toLowerCase());
+        if (v && v.voice_id) {
+          try { localStorage.setItem(EL_VOICE_STORE, v.voice_id); } catch (e) {}
+          return v.voice_id;
+        }
+      }
+      if (voices[0] && voices[0].voice_id) return voices[0].voice_id;
+    }
+  } catch (e) {}
+  return EL_VOICE_FALLBACK;
+}
+
+async function speakEleven(text, guard, finish) {
+  const key = getElevenKey();
+  if (!key) throw new Error("no key");
+  // Playback goes through the AudioContext unlocked during the tap, which is
+  // what lets audio start after an await on iOS.
+  if (!toneCtx) throw new Error("audio not unlocked");
+  if (toneCtx.state === "suspended") { try { await toneCtx.resume(); } catch (e) {} }
+
+  const voiceId = await elevenVoiceId(key);
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+    {
+      method: "POST",
+      headers: { "xi-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_turbo_v2_5",           // low latency, good quality
+        voice_settings: { stability: 0.45, similarity_boost: 0.75, style: 0.15, use_speaker_boost: true },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      setElevenKey("");                            // bad key: stop trying with it
+      setStatus("That ElevenLabs key was rejected — using the built-in voice, Christian.");
+    } else if (res.status === 429) {
+      setStatus("ElevenLabs quota reached — using the built-in voice, Christian.");
+    }
+    throw new Error("eleven http " + res.status);
+  }
+
+  const buf = await res.arrayBuffer();
+  const audio = await new Promise((resolve, reject) => {
+    // Callback form: Safari's decodeAudioData doesn't always return a promise.
+    try { toneCtx.decodeAudioData(buf, resolve, reject); } catch (e) { reject(e); }
+  });
+
+  clearTimeout(guard);                             // real duration is known now
+  const src = toneCtx.createBufferSource();
+  src.buffer = audio;
+  const analyser = toneCtx.createAnalyser();
+  analyser.fftSize = 256;
+  src.connect(analyser); analyser.connect(toneCtx.destination);
+  elevenAnalyser = analyser; elevenSource = src;
+  src.onended = () => { if (elevenSource === src) elevenSource = null; finish(); };
+  src.start();
+  // Belt and braces: finish even if onended never fires.
+  setTimeout(finish, (audio.duration + 0.6) * 1000);
+}
 
 /* iOS requires a user gesture to unlock audio output. */
 let audioUnlocked = false;
@@ -648,6 +774,7 @@ let activated = false;
 /* ONE TAP: greet, then start listening automatically.
    Tapping anywhere on the screen counts, so the tap can never "miss". */
 function onReactorTap() {
+  if (longPressed) { longPressed = false; return; }  // that press opened settings
   unlockAudio();
   if (!activated) {
     activated = true;
@@ -666,6 +793,41 @@ function onReactorTap() {
 
 /* Any tap on the page triggers it (pointerup fires reliably on iOS Safari). */
 document.addEventListener("pointerup", onReactorTap);
+
+/* ---- Long-press (0.8s) opens the ElevenLabs key setup. No visible button. ---- */
+document.addEventListener("pointerdown", () => {
+  longPressed = false;
+  pressTimer = setTimeout(() => { longPressed = true; promptElevenKey(); }, 800);
+});
+["pointerup", "pointercancel"].forEach((evt) =>
+  document.addEventListener(evt, () => { clearTimeout(pressTimer); })
+);
+
+function promptElevenKey() {
+  const current = getElevenKey();
+  const msg = current
+    ? "ElevenLabs key is set. Paste a new key to replace it, or clear the box and press OK to remove it."
+    : "Paste your ElevenLabs API key for the cinematic voice.\nIt is stored only on this device.";
+  const entered = window.prompt(msg, current ? "" : "");
+  if (entered === null) return;                 // cancelled
+  const k = entered.trim();
+  setElevenKey(k);
+  if (k) {
+    setStatus("Cinematic voice enabled, Christian.");
+    speak("Voice module upgraded. How may I assist you, Christian?");
+  } else {
+    setStatus("Cinematic voice removed — using the built-in voice, Christian.");
+  }
+}
+
+/* Allow #key=... in the URL, then strip it so it isn't left in history. */
+(function readKeyFromHash() {
+  const m = /[#&]key=([^&]+)/.exec(location.hash || "");
+  if (m) {
+    setElevenKey(decodeURIComponent(m[1]));
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+})();
 
 /* Desktop convenience: press SPACE to talk. */
 document.addEventListener("keydown", (e) => {

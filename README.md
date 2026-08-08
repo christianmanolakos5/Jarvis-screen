@@ -97,6 +97,34 @@ significant: the default voice is noticeably more robotic.
 > actual film voice (Paul Bettany) isn't something any browser ships, and
 > cloning a real actor's voice isn't something this project does.
 
+### Cinematic voice via ElevenLabs (optional)
+
+For a dramatically better voice, Jarvis can speak through
+[ElevenLabs](https://elevenlabs.io). It picks a British male voice from your
+account (George → Daniel → Brian → Charlie) and, while it talks, the reactor
+pulses to the **real audio waveform** rather than a simulated rhythm.
+
+**Setup — takes a minute:**
+
+1. Make a free ElevenLabs account and copy your API key from
+   **Profile → API Keys**.
+2. On the Jarvis page, **press and hold the circle for one second**.
+3. Paste the key and press OK. Jarvis confirms in the new voice.
+
+To remove it, long-press again, clear the box, press OK.
+
+> **Where the key lives:** only in this browser's `localStorage`, on your
+> device. It is never committed to this repository and is sent nowhere except
+> ElevenLabs.
+>
+> **Never hard-code the key into these files** — this site is public, so a key
+> in the source would be visible to anyone and could be used to drain your
+> quota. Anyone with access to your unlocked device/browser profile can read
+> a stored key, so treat it like a password and rotate it if in doubt.
+
+If the key is rejected, the quota runs out, or the network fails, Jarvis
+automatically falls back to the built-in voice and tells you why.
+
 ## Bluetooth speakers & microphones 🎧
 
 Jarvis uses your device's **system audio route**, so when you connect Bluetooth
