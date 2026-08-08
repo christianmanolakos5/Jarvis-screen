@@ -8,6 +8,13 @@
 
 const USER_NAME = "Christian";
 
+/* Shared state — declared FIRST. The animation loop starts before the voice
+   sections below, and reading a `let` before its declaration throws, which
+   would abort the whole script (and silently kill every event listener). */
+let listening = false;   // mic is open
+let speaking = false;    // Jarvis is talking
+let recState = "idle";   // idle | recording | transcribing
+
 /* ---------- Element refs ---------- */
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -147,8 +154,18 @@ function drawViz() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const cx = canvas.width / 2, cy = canvas.height / 2;
   const baseR = canvas.width * 0.30;
-  energy += (targetEnergy - energy) * 0.12;
   const t = performance.now() / 1000;
+
+  // While Jarvis talks, drive the bars with a syllable-like rhythm so the
+  // circle visibly moves and glows to the beat of its voice.
+  if (speaking) {
+    const syl = Math.abs(Math.sin(t * 7.3)) * 0.62      // syllable rate
+              + Math.abs(Math.sin(t * 3.1 + 1.3)) * 0.26 // phrase swell
+              + Math.abs(Math.sin(t * 13.7)) * 0.12;     // consonant chatter
+    targetEnergy = 0.30 + syl * 0.62;
+  }
+  // Snappier response while talking, smoother when idle.
+  energy += (targetEnergy - energy) * (speaking ? 0.34 : 0.12);
 
   for (let i = 0; i < BARS; i++) {
     const a = (i / BARS) * Math.PI * 2;
@@ -165,6 +182,16 @@ function drawViz() {
       : `rgba(90,220,255,${alpha})`;
     ctx.shadowBlur = 8; ctx.shadowColor = ctx.strokeStyle;
     ctx.stroke();
+  }
+
+  // Core breathes with the same energy, so the whole reactor moves as one.
+  const core = el.reactor.querySelector(".core");
+  if (core) {
+    const s = 1 + energy * (speaking ? 0.16 : 0.05);
+    core.style.transform = `translate(-50%, -50%) scale(${s.toFixed(3)})`;
+    core.style.boxShadow =
+      `0 0 ${(30 + energy * 90).toFixed(0)}px rgba(55,198,244,${(0.4 + energy * 0.5).toFixed(2)}), ` +
+      `inset 0 0 ${(30 + energy * 50).toFixed(0)}px rgba(55,198,244,0.4)`;
   }
   requestAnimationFrame(drawViz);
 }
@@ -189,7 +216,6 @@ function addLine(who, text) {
    6. VOICE OUTPUT (SpeechSynthesis) — works on iPhone too
    ============================================================ */
 let muted = false;
-let speaking = false;
 let preferredVoice = null;
 
 function pickVoice() {
@@ -211,24 +237,50 @@ function pickVoice() {
 speechSynthesis.onvoiceschanged = pickVoice;
 pickVoice();
 
-function speak(text) {
+function speak(text, onDone) {
   addLine("jarvis", text);
+
+  // --- 1. Start the talking animation FIRST. Nothing above this line can throw,
+  //        so the circle always moves to the beat even if speech itself fails.
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    speaking = false;
+    el.reactor.classList.remove("speaking");
+    el.coreLabel.textContent = listening ? "LISTENING" : "STANDBY";
+    targetEnergy = 0.2;
+    if (onDone) onDone();
+  };
+  speaking = true;
+  el.reactor.classList.add("speaking");
+  el.coreLabel.textContent = "SPEAKING";
+  // Safety net: end the animation (and run onDone) even if the speech engine
+  // never fires onstart/onend — a known iOS quirk.
+  const estMs = Math.max(1600, text.length * 70);
+  const guard = setTimeout(finish, estMs);
+
   if (muted || !("speechSynthesis" in window)) return;
-  // iOS Safari bug: cancel() must NOT be called blindly before speak(), or the
-  // engine goes silent. Only clear the queue if something is actually playing.
+
+  // --- 2. Everything that touches the speech engine is guarded.
   try {
+    // iOS Safari bug: cancel() must NOT be called blindly before speak(), or
+    // the engine goes silent. Only clear the queue if something is playing.
     if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
-  } catch (e) {}
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US";
-  // Only assign an on-device voice; remote voices can produce no audio on iOS.
-  if (preferredVoice && preferredVoice.localService !== false) u.voice = preferredVoice;
-  u.rate = 1.0; u.pitch = 0.9; u.volume = 1;
-  u.onstart = () => { speaking = true; el.reactor.classList.add("speaking"); el.coreLabel.textContent = "SPEAKING"; targetEnergy = 0.9; };
-  u.onend = () => { speaking = false; el.reactor.classList.remove("speaking"); el.coreLabel.textContent = listening ? "LISTENING" : "STANDBY"; targetEnergy = 0.2; };
-  u.onboundary = () => { targetEnergy = 0.55 + Math.random() * 0.4; };
-  try { speechSynthesis.resume(); } catch (e) {}  // iOS can leave the engine paused
-  speechSynthesis.speak(u);
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    u.rate = 1.0; u.pitch = 0.9; u.volume = 1;
+    // Assigning a bad/remote voice can throw or go silent — never fatal.
+    try {
+      if (preferredVoice && preferredVoice.localService !== false) u.voice = preferredVoice;
+    } catch (e) {}
+    u.onstart = () => { speaking = true; el.reactor.classList.add("speaking"); el.coreLabel.textContent = "SPEAKING"; };
+    u.onend = () => { clearTimeout(guard); finish(); };
+    u.onerror = () => { clearTimeout(guard); finish(); };
+    speechSynthesis.resume();   // iOS can leave the engine paused
+    speechSynthesis.speak(u);
+  } catch (e) { /* animation + guard timer still carry the flow */ }
 }
 
 // iOS pauses the speech engine unexpectedly; nudge it back while speaking.
@@ -397,7 +449,6 @@ function micConstraints() {
    ============================================================ */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const useNative = !!SR;
-let listening = false;
 
 /* ---------- Reactor state helper ---------- */
 function setMicUI(state) {
@@ -448,18 +499,23 @@ async function ensureTranscriber() {
     transcriber = t;
     setStatus("Voice model ready, Christian. Tap the circle and speak.");
     return t;
-  })();
+  })().catch((err) => {
+    // Never leave an unhandled rejection; allow a later retry.
+    transcriberPromise = null;
+    setStatus("Could not load the voice model — check your connection, Christian.");
+    throw err;
+  });
   return transcriberPromise;
 }
 
 /* Raw-PCM recorder (no codecs → robust on iOS Safari) */
-let recState = "idle"; // idle | recording | transcribing
+/* recState is declared at the top of this file. */
 let recAC, recSource, recProcessor, recStream, recBuffers, recSampleRate;
 let speechDetected, silenceStart, recStart;
 
 async function startRecording() {
   try {
-    ensureTranscriber(); // begin loading model in parallel
+    ensureTranscriber().catch(() => {}); // preload in parallel; handled at use site
     recStream = await navigator.mediaDevices.getUserMedia(micConstraints());
     recAC = new (window.AudioContext || window.webkitAudioContext)();
     if (recAC.state === "suspended") await recAC.resume();
@@ -567,21 +623,27 @@ function toggleVoice() {
    ============================================================ */
 let activated = false;
 
-/* The glowing reactor IS the only button. */
+/* ONE TAP: greet, then start listening automatically.
+   Tapping anywhere on the screen counts, so the tap can never "miss". */
 function onReactorTap() {
   unlockAudio();
   if (!activated) {
     activated = true;
     setMicUI("idle");
     el.coreLabel.textContent = "ONLINE";
-    setStatus("Tap the circle again and speak, Christian.");
-    chime();                                   // audible confirmation
-    speak(`Hello ${USER_NAME}, how can I help you?`);
+    setStatus("Listening right after the greeting — just speak, Christian.");
+    chime();
+    // Greet, then open the mic on its own: one tap does everything.
+    speak(`Hello ${USER_NAME}, how can I help you?`, () => {
+      if (!listening && recState !== "recording") toggleVoice();
+    });
     return;
   }
   toggleVoice();
 }
-el.reactor.addEventListener("click", onReactorTap);
+
+/* Any tap on the page triggers it (pointerup fires reliably on iOS Safari). */
+document.addEventListener("pointerup", onReactorTap);
 
 /* Desktop convenience: press SPACE to talk. */
 document.addEventListener("keydown", (e) => {
