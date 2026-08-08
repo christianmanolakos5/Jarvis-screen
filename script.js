@@ -562,7 +562,7 @@ el.micBtn.addEventListener("click", () => {
       ? "Jarvis online. Tap TALK and speak, Christian."
       : "Jarvis online. Tap TALK, allow the mic, then speak, Christian.");
     setMicUI("idle");
-    speak(`${greetingByTime()}, ${USER_NAME}. J.A.R.V.I.S. is online and ready.`);
+    speak(`Hello ${USER_NAME}, how can I help you?`);
     return;
   }
   toggleVoice();
