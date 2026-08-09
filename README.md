@@ -68,35 +68,44 @@ Open questions are answered from **Wikipedia** live (free, no API key), so the
 range of things he knows is very wide. When nothing matches, he says so rather
 than inventing an answer.
 
-### Real AI brain via Claude (optional, paid)
+### Real AI brain — free, via Google Gemini
 
-Add an [Anthropic API key](https://console.anthropic.com) and open questions go
-to **Claude** instead of Wikipedia — real conversation, follow-up questions,
+Add a free [Google AI Studio key](https://aistudio.google.com/apikey) and open
+questions go to **Gemini** instead of Wikipedia — real conversation, follow-ups,
 writing, reasoning, opinions. Jarvis keeps the last few exchanges as context, so
 "what did I just tell you?" works.
 
-**Setup:** press and hold the circle, paste a key starting `sk-ant-`. The same
-box takes the ElevenLabs key (`sk_…`) — it routes by prefix.
+**It is genuinely free**: Google's free tier needs no credit card and no
+billing account. There are per-minute and per-day request limits; when you hit
+one, Jarvis falls back to Wikipedia and says so, then works again later.
+
+**Setup:** press and hold the circle, paste a key starting `AIza`. The same box
+takes every key and routes by prefix:
+
+| Key starts with | Goes to | Cost |
+|---|---|---|
+| `AIza` | **Google Gemini** — the AI brain | **Free** |
+| `sk_` | ElevenLabs — cinematic voice | Free tier, then paid |
+| `sk-ant-` | Anthropic Claude — alternative brain | Paid, no free tier |
+
+Claude is supported but entirely optional; with both set, the free Gemini brain
+is used.
 
 Details:
 
-- Claude answers with the Jarvis persona, addressed to Christian, in one to
-  three spoken sentences (no markdown — it's read aloud).
-- It's given the current date, time and weather, so it answers those naturally.
-- **Local commands never reach the API** — time, maths, timers, dice, opening
-  sites and the weather are answered instantly and for free on-device.
-- If the key is rejected, the rate limit is hit, or the network fails, Jarvis
-  falls back to Wikipedia and says why.
+- Replies use the Jarvis persona, addressed to Christian, in one to three spoken
+  sentences (no markdown — it's read aloud).
+- The model is given the current date, time and weather, so it answers those
+  naturally.
+- **Local commands never reach any API** — time, maths, timers, dice, opening
+  sites and the weather are answered instantly and offline on-device.
+- If the key is rejected, a rate limit is hit, or the network fails, Jarvis
+  falls back to Wikipedia and says why on screen.
 
-> **Cost:** unlike the Wikipedia path, the Anthropic API is **pay-as-you-go with
-> no free tier** — you are billed per token. Short voice replies are cheap, but
-> it is not free. Set a spend limit in the Anthropic console.
->
-> **Key exposure:** the key is stored only in this browser's `localStorage` and
-> sent only to Anthropic. Never hard-code it into these files — this site is
-> public. Calling the API from a browser also means anyone with access to your
-> unlocked device can read the key; treat it like a password and rotate it if in
-> doubt.
+> **Key exposure:** keys are stored only in this browser's `localStorage` and
+> sent only to the service they belong to. Never hard-code one into these files
+> — this site is public. Anyone with access to your unlocked device can read a
+> stored key, so treat it like a password and rotate it if in doubt.
 
 ### Things to say
 

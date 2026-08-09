@@ -727,10 +727,13 @@ function tryChance(q) {
    committed to the repo. Without a key, Jarvis falls back to the local
    skills above plus Wikipedia.
    ============================================================ */
-const AI_KEY_STORE = "jarvis_anthropic_key";
+const AI_KEY_STORE = "jarvis_anthropic_key";   // Claude (paid)
+const GEM_KEY_STORE = "jarvis_gemini_key";    // Google Gemini (free tier)
 const AI_MODEL = "claude-opus-5";
+/* Google keeps renaming models; try newest first and fall back. */
+const GEM_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
 const AI_MAX_HISTORY = 12;          // 6 exchanges of context
-const aiHistory = [];               // [{role, content}]
+const aiHistory = [];               // [{role, content}] — shared by both engines
 
 function getAiKey() { try { return localStorage.getItem(AI_KEY_STORE) || ""; } catch (e) { return ""; } }
 function setAiKey(k) {
@@ -739,6 +742,14 @@ function setAiKey(k) {
     else localStorage.removeItem(AI_KEY_STORE);
   } catch (e) {}
 }
+function getGemKey() { try { return localStorage.getItem(GEM_KEY_STORE) || ""; } catch (e) { return ""; } }
+function setGemKey(k) {
+  try {
+    if (k) localStorage.setItem(GEM_KEY_STORE, k.trim());
+    else localStorage.removeItem(GEM_KEY_STORE);
+  } catch (e) {}
+}
+function hasBrain() { return !!(getGemKey() || getAiKey()); }
 
 /* Live context so Claude can answer about time, date and weather naturally. */
 function aiSystemPrompt() {
@@ -762,6 +773,75 @@ function aiSystemPrompt() {
   ].join("\n");
 }
 
+/* ---------- Google Gemini (free tier) ---------- */
+async function askGemini(text) {
+  const key = getGemKey();
+  if (!key) throw new Error("no key");
+
+  aiHistory.push({ role: "user", content: text });
+  while (aiHistory.length > AI_MAX_HISTORY) aiHistory.shift();
+
+  // Gemini calls the assistant role "model".
+  const contents = aiHistory.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  let lastErr = null;
+  for (const model of GEM_MODELS) {
+    let res;
+    try {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=` +
+          encodeURIComponent(key),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            contents,
+            systemInstruction: { parts: [{ text: aiSystemPrompt() }] },
+            generationConfig: { maxOutputTokens: 300, temperature: 0.7 },
+          }),
+        }
+      );
+    } catch (e) { lastErr = e; continue; }         // network — try next model
+
+    if (res.status === 404) { lastErr = new Error("model " + model); continue; }  // renamed model
+    if (!res.ok) {
+      if (res.status === 400 || res.status === 403) {
+        setGemKey("");
+        setStatus("That Gemini key was rejected — using the built-in brain, Christian.");
+      } else if (res.status === 429) {
+        setStatus("Gemini free limit reached for now — using the built-in brain, Christian.");
+      }
+      aiHistory.pop();
+      throw new Error("gemini http " + res.status);
+    }
+
+    const data = await res.json();
+    const cand = (data.candidates || [])[0];
+    const reply = (((cand || {}).content || {}).parts || [])
+      .map((p) => p.text || "").join(" ").replace(/\s+/g, " ").trim();
+    if (!reply) {
+      aiHistory.pop();
+      // Safety filters return a candidate with no text.
+      if (cand && cand.finishReason === "SAFETY") return `I'd rather not answer that one, ${USER_NAME}.`;
+      throw new Error("empty reply");
+    }
+    aiHistory.push({ role: "assistant", content: reply });
+    return reply;
+  }
+  aiHistory.pop();
+  throw lastErr || new Error("gemini unavailable");
+}
+
+/* ---------- Dispatcher: free brain first, then paid ---------- */
+async function askAI(text) {
+  if (getGemKey()) return askGemini(text);
+  return askClaude(text);
+}
+
+/* ---------- Anthropic Claude (paid, optional) ---------- */
 async function askClaude(text) {
   const key = getAiKey();
   if (!key) throw new Error("no key");
@@ -963,13 +1043,13 @@ async function processInput(text) {
     el.coreLabel.textContent = "THINKING";
 
     // Open-ended question → Claude when configured, else Wikipedia.
-    if (getAiKey()) {
+    if (hasBrain()) {
       setStatus("Thinking, Christian…");
       try {
-        speak(await askClaude(text));
+        speak(await askAI(text));
         return;
       } catch (err) {
-        addLine("jarvis", "[ai] Claude unavailable (" +
+        addLine("jarvis", "[ai] AI unavailable (" +
           (err && err.message ? err.message : "error") + ") — falling back.");
       }
     }
@@ -1257,25 +1337,31 @@ document.addEventListener("pointerdown", () => {
 function promptElevenKey() {
   const have = [];
   if (getElevenKey()) have.push("voice");
-  if (getAiKey()) have.push("AI brain");
+  if (getGemKey()) have.push("free AI brain");
+  if (getAiKey()) have.push("Claude");
   const msg =
     "Paste a key, Christian.\n\n" +
-    "• sk-ant-…  → Claude, the AI brain\n" +
-    "• sk_…      → ElevenLabs, the cinematic voice\n\n" +
+    "• AIza…     → Google Gemini — the FREE AI brain\n" +
+    "• sk_…      → ElevenLabs — cinematic voice\n" +
+    "• sk-ant-…  → Claude (paid, optional)\n\n" +
     (have.length ? "Currently set: " + have.join(" + ") + ".\n" : "") +
-    "Leave empty and press OK to remove both. Stored only on this device.";
+    "Leave empty and press OK to remove all. Stored only on this device.";
   const entered = window.prompt(msg, "");
   if (entered === null) return;                 // cancelled
   const k = entered.trim();
 
   if (!k) {
-    setElevenKey(""); setAiKey("");
+    setElevenKey(""); setAiKey(""); setGemKey("");
     setStatus("Keys removed — using the built-in voice and brain, Christian.");
     return;
   }
-  if (/^sk-ant-/i.test(k)) {
+  if (/^AIza/.test(k)) {
+    setGemKey(k);
+    setStatus("Free AI brain connected, Christian.");
+    speak(`Intelligence module online. What would you like to know, ${USER_NAME}?`);
+  } else if (/^sk-ant-/i.test(k)) {
     setAiKey(k);
-    setStatus("AI brain connected, Christian.");
+    setStatus("Claude connected, Christian.");
     speak(`Intelligence module online. What would you like to know, ${USER_NAME}?`);
   } else {
     setElevenKey(k);
@@ -1290,9 +1376,11 @@ function promptElevenKey() {
   const hash = location.hash || "";
   const voice = /[#&]key=([^&]+)/.exec(hash);
   const brain = /[#&]ai=([^&]+)/.exec(hash);
+  const gem = /[#&]gem=([^&]+)/.exec(hash);
   if (voice) setElevenKey(decodeURIComponent(voice[1]));
   if (brain) setAiKey(decodeURIComponent(brain[1]));
-  if (voice || brain) history.replaceState(null, "", location.pathname + location.search);
+  if (gem) setGemKey(decodeURIComponent(gem[1]));
+  if (voice || brain || gem) history.replaceState(null, "", location.pathname + location.search);
 })();
 
 /* Desktop convenience: press SPACE to talk. */
