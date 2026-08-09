@@ -276,6 +276,17 @@ function pickVoice() {
 speechSynthesis.onvoiceschanged = pickVoice;
 pickVoice();
 
+/* iOS Safari populates getVoices() asynchronously and its onvoiceschanged
+   event is unreliable — without this the British voice is never selected and
+   iOS falls back to its default American one. Keep retrying until it lands. */
+(function waitForVoices() {
+  let tries = 0;
+  const t = setInterval(() => {
+    if (!preferredVoice) pickVoice();
+    if (preferredVoice || ++tries > 40) clearInterval(t);   // up to ~10s
+  }, 250);
+})();
+
 function speak(text, onDone) {
   addLine("jarvis", text);
 
@@ -321,6 +332,9 @@ function speakBuiltIn(text, guard, finish) {
     // iOS Safari bug: cancel() must NOT be called blindly before speak(), or
     // the engine goes silent. Only clear the queue if something is playing.
     if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+
+    // Voices may only have arrived after load — pick again if we still have none.
+    if (!preferredVoice) pickVoice();
 
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "en-GB";               // British, to match the J.A.R.V.I.S. voice
