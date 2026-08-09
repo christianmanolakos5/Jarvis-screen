@@ -1351,6 +1351,34 @@ function continueConversation() {
 /* Any tap on the page triggers it (pointerup fires reliably on iOS Safari). */
 document.addEventListener("pointerup", onReactorTap);
 
+/* ---- Go silent the moment the page is hidden, backgrounded, or closed. ----
+   Jarvis's voice plays through an <audio> element so iOS Silent Mode can't
+   mute it — but that also means iOS treats it like music and keeps playing
+   after you leave the tab. Stop everything on the way out. */
+function silenceEverything() {
+  conversing = false;
+  try { mediaEl.pause(); mediaEl.currentTime = 0; mediaEl.removeAttribute("src"); mediaEl.load(); } catch (e) {}
+  try { speechSynthesis.cancel(); } catch (e) {}
+  try { if (recog && listening) recog.stop(); } catch (e) {}
+  try { if (recStream) recStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  try { if (recAC && recAC.state !== "closed") recAC.close(); } catch (e) {}
+  speaking = false; listening = false; recState = "idle";
+  elevenAnalyser = null;
+  targetEnergy = 0.15;
+  try {
+    el.reactor.classList.remove("speaking", "listening");
+    el.coreLabel.textContent = "STANDBY";
+    setStatus("Tap the circle to talk, Christian.");
+  } catch (e) {}
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) silenceEverything();     // tab switched or phone locked
+});
+window.addEventListener("pagehide", silenceEverything);   // closed / navigated away
+window.addEventListener("beforeunload", silenceEverything);
+window.addEventListener("blur", () => { if (document.hidden) silenceEverything(); });
+
 /* ---- Long-press (0.8s) opens the ElevenLabs key setup. No visible button. ---- */
 document.addEventListener("pointerdown", () => {
   longPressed = false;
