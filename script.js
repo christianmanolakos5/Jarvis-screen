@@ -1459,6 +1459,38 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ============================================================
+   10b. SELF-UPDATE
+
+   The iOS home-screen app otherwise freezes the code it was installed
+   with, so later fixes never reach it. Register a network-first service
+   worker and reload once when a newer version is published.
+   ============================================================ */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      reg.addEventListener("updatefound", () => {
+        const fresh = reg.installing;
+        if (!fresh) return;
+        fresh.addEventListener("statechange", () => {
+          // A new version is ready and an old one was in control — swap to it.
+          if (fresh.state === "installed" && navigator.serviceWorker.controller) {
+            fresh.postMessage("skipWaiting");
+          }
+        });
+      });
+      setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+    }).catch(() => {});
+
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloaded) return;                 // guard against a reload loop
+      reloaded = true;
+      location.reload();
+    });
+  });
+}
+
+/* ============================================================
    11. BOOT
    ============================================================ */
 window.addEventListener("load", () => {
