@@ -1440,17 +1440,36 @@ function promptElevenKey() {
   }
 }
 
-/* Allow #key=… (voice) and #ai=… (brain) in the URL, then strip them
-   so the keys aren't left sitting in browser history. */
-(function readKeysFromHash() {
-  const hash = location.hash || "";
-  const voice = /[#&]key=([^&]+)/.exec(hash);
-  const brain = /[#&]ai=([^&]+)/.exec(hash);
-  const gem = /[#&]gem=([^&]+)/.exec(hash);
+/* Keys can ride in the URL as #key= (voice), #gem= (free brain), #ai= (Claude).
+
+   iOS gives a home-screen app its own storage, so keys saved in Safari are
+   invisible to it. "Add to Home Screen" captures the URL as the app's start
+   page — so while we're still in Safari we LEAVE the keys in the address bar,
+   letting them travel into the installed app automatically. Once running as
+   an installed app the keys are saved for good, so we strip them then. */
+function isStandalone() {
+  return window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+}
+
+(function readKeysFromUrl() {
+  const src = (location.hash || "") + "&" + (location.search || "").replace(/^\?/, "");
+  const voice = /[#&?]key=([^&]+)/.exec(src);
+  const brain = /[#&?]ai=([^&]+)/.exec(src);
+  const gem = /[#&?]gem=([^&]+)/.exec(src);
   if (voice) setElevenKey(decodeURIComponent(voice[1]));
   if (brain) setAiKey(decodeURIComponent(brain[1]));
   if (gem) setGemKey(decodeURIComponent(gem[1]));
-  if (voice || brain || gem) history.replaceState(null, "", location.pathname + location.search);
+
+  if (!(voice || brain || gem)) return;
+
+  if (isStandalone()) {
+    // Installed app: keys are saved permanently — clean the address away.
+    history.replaceState(null, "", location.pathname);
+  } else {
+    // Still in Safari: keep them so Add to Home Screen carries them across.
+    setStatus("Keys loaded. Share → <b>Add to Home Screen</b> to keep them, Christian.");
+  }
 })();
 
 /* Desktop convenience: press SPACE to talk. */
