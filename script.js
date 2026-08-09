@@ -775,14 +775,24 @@ function aiSystemPrompt() {
     ? `${weatherState.temp} degrees and ${weatherState.cond.toLowerCase()} in ${weatherState.label}`
     : "unavailable";
   return [
-    `You are J.A.R.V.I.S., ${USER_NAME}'s personal AI assistant, in the style of the Iron Man films:`,
-    `composed, dry, quietly witty, unfailingly loyal. Address him as ${USER_NAME}.`,
+    `You are J.A.R.V.I.S., ${USER_NAME}'s personal AI assistant — think Iron Man's Jarvis,`,
+    `but relaxed: warm, natural, quick-witted. You are having a real spoken conversation.`,
     ``,
-    `Your replies are spoken aloud, so: keep them to one to three sentences.`,
-    `No markdown, no bullet points, no lists, no emoji, no headings — plain spoken prose only.`,
-    `Never narrate what you are about to do; just answer. If you do not know, say so plainly.`,
+    `How to talk:`,
+    `- Sound like a person talking, not a document being read. Contractions, natural rhythm.`,
+    `- Usually one to three sentences. Go longer only when he actually asks you to explain something.`,
+    `- Answer the question first, then add detail if it helps. Never pad or restate the question.`,
+    `- Plain spoken words only: no markdown, asterisks, bullet points, numbered lists, or emoji.`,
+    `- Write numbers, units and symbols the way they're said aloud.`,
+    `- Use his name, ${USER_NAME}, occasionally — not in every reply.`,
+    `- You can have opinions, joke, and disagree. Don't be a search engine.`,
+    `- If you don't know, say so in a sentence rather than guessing.`,
     ``,
-    `Current context you may use when relevant:`,
+    `Speech recognition sometimes garbles his words. If a message is close to something`,
+    `sensible, answer what he clearly meant. Only if it's truly unintelligible, ask him`,
+    `to say it again — briefly, and never more than once in a row.`,
+    ``,
+    `Useful context right now:`,
     `- Date and time: ${when}`,
     `- Weather: ${wx}`,
   ].join("\n");
@@ -850,10 +860,56 @@ async function askGemini(text) {
   throw lastErr || new Error("gemini unavailable");
 }
 
-/* ---------- Dispatcher: free brain first, then paid ---------- */
+/* ---------- Built-in AI — no key, no signup, free ----------
+   Uses Pollinations' open text endpoint. This is what makes Jarvis
+   conversational out of the box; the keyed engines below are optional
+   upgrades for people who want them. */
+async function askBuiltInAI(text) {
+  aiHistory.push({ role: "user", content: text });
+  while (aiHistory.length > AI_MAX_HISTORY) aiHistory.shift();
+
+  const messages = [{ role: "system", content: aiSystemPrompt() }].concat(
+    aiHistory.map((m) => ({ role: m.role, content: m.content }))
+  );
+
+  const ctl = new AbortController();
+  const timeout = setTimeout(() => ctl.abort(), 20000);   // never hang the mic
+  try {
+    const res = await fetch("https://text.pollinations.ai/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages, model: "openai", seed: Date.now() % 100000 }),
+      signal: ctl.signal,
+    });
+    if (!res.ok) throw new Error("ai http " + res.status);
+
+    let reply = (await res.text() || "").trim();
+    // The endpoint returns plain text, but sometimes wraps it in JSON.
+    if (reply.startsWith("{")) {
+      try {
+        const j = JSON.parse(reply);
+        reply = (j.choices && j.choices[0] && j.choices[0].message &&
+                 j.choices[0].message.content) || j.response || j.text || reply;
+      } catch (e) {}
+    }
+    reply = reply.replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim();  // strip markdown — it's spoken
+    if (!reply) throw new Error("empty reply");
+
+    aiHistory.push({ role: "assistant", content: reply });
+    return reply;
+  } catch (e) {
+    aiHistory.pop();
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/* ---------- Dispatcher: your own key if set, else the built-in AI ---------- */
 async function askAI(text) {
   if (getGemKey()) return askGemini(text);
-  return askClaude(text);
+  if (getAiKey()) return askClaude(text);
+  return askBuiltInAI(text);
 }
 
 /* ---------- Anthropic Claude (paid, optional) ---------- */
@@ -1057,16 +1113,14 @@ async function processInput(text) {
 
     el.coreLabel.textContent = "THINKING";
 
-    // Open-ended question → Claude when configured, else Wikipedia.
-    if (hasBrain()) {
-      setStatus("Thinking, Christian…");
-      try {
-        speak(await askAI(text));
-        return;
-      } catch (err) {
-        addLine("jarvis", "[ai] AI unavailable (" +
-          (err && err.message ? err.message : "error") + ") — falling back.");
-      }
+    // Everything else → the AI. Built in and keyless, so this always runs.
+    setStatus("Thinking, Christian…");
+    try {
+      speak(await askAI(text));
+      return;
+    } catch (err) {
+      addLine("jarvis", "[ai] AI unreachable (" +
+        (err && err.message ? err.message : "error") + ") — looking it up instead.");
     }
 
     setStatus("Looking that up, Christian…");
@@ -1089,7 +1143,13 @@ async function processInput(text) {
 function populateDevices() {}   /* no device picker in the single-button UI */
 
 function micConstraints() {
-  return { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
+  return { audio: {
+    echoCancellation: true,     // don't transcribe Jarvis's own voice
+    noiseSuppression: true,     // room noise off the signal
+    autoGainControl: true,      // lift a quiet or distant voice
+    channelCount: 1,
+    sampleRate: 48000,          // resampled to 16k for the model
+  } };
 }
 
 /* ============================================================
@@ -1155,7 +1215,7 @@ async function ensureTranscriber() {
     env.allowLocalModels = false;
     // GitHub Pages can't set cross-origin-isolation headers, so keep WASM single-threaded.
     env.backends.onnx.wasm.numThreads = 1;
-    const t = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en", {
+    const t = await pipeline("automatic-speech-recognition", "Xenova/whisper-base.en", {
       progress_callback: (p) => {
         if (p.status === "progress" && p.file && /\.(onnx|bin)$/.test(p.file)) {
           setStatus(`Downloading voice model… ${Math.round(p.progress || 0)}%`);
@@ -1177,7 +1237,7 @@ async function ensureTranscriber() {
 /* Raw-PCM recorder (no codecs → robust on iOS Safari) */
 /* recState is declared at the top of this file. */
 let recAC, recSource, recProcessor, recStream, recBuffers, recSampleRate;
-let speechDetected, silenceStart, recStart;
+let speechDetected, silenceStart, speechStart, recStart;
 
 async function startRecording() {
   try {
@@ -1189,9 +1249,14 @@ async function startRecording() {
     recSource = recAC.createMediaStreamSource(recStream);
     recProcessor = recAC.createScriptProcessor(4096, 1, 1);
     recBuffers = [];
-    speechDetected = false; silenceStart = 0; recStart = performance.now();
+    speechDetected = false; silenceStart = 0; speechStart = 0; recStart = performance.now();
 
-    const SPEAK_THRESH = 0.012, SILENCE_MS = 1300, MAX_MS = 12000;
+    // Tuned for real speech: a lower bar so quiet or distant words register,
+    // and a longer pause allowance so a mid-sentence breath doesn't end the turn.
+    const SPEAK_THRESH = 0.007;    // was 0.012 — quiet speech was being missed
+    const SILENCE_MS = 1700;       // was 1300 — cut people off mid-thought
+    const MAX_MS = 20000;          // was 12000 — room for a longer question
+    const MIN_SPEECH_MS = 400;     // ignore a cough/tap as a whole turn
     recProcessor.onaudioprocess = (e) => {
       const ch = e.inputBuffer.getChannelData(0);
       recBuffers.push(new Float32Array(ch));
@@ -1199,10 +1264,14 @@ async function startRecording() {
       const rms = Math.sqrt(sum / ch.length);
       targetEnergy = Math.min(1, rms * 9);
       const now = performance.now();
-      if (rms > SPEAK_THRESH) { speechDetected = true; silenceStart = 0; }
+      if (rms > SPEAK_THRESH) {
+        if (!speechDetected) speechStart = now;
+        speechDetected = true; silenceStart = 0;
+      }
       else if (speechDetected) {
         if (!silenceStart) silenceStart = now;
-        else if (now - silenceStart > SILENCE_MS) stopRecording();
+        else if (now - silenceStart > SILENCE_MS &&
+                 (now - speechStart) > MIN_SPEECH_MS) stopRecording();
       }
       if (now - recStart > MAX_MS) stopRecording();
     };
@@ -1255,14 +1324,33 @@ async function stopRecording() {
   try {
     const t = await ensureTranscriber();
     const out = await t(audio16k);
-    const text = (out && out.text ? out.text : "").trim();
+    const text = cleanTranscript(out && out.text ? out.text : "");
     recState = "idle"; setMicUI("idle");
-    if (text && !/^\[.*\]$/.test(text)) { processInput(text); setStatus("Tap the circle to speak again, Christian."); }
-    else { setStatus("I didn't catch that, Christian. Tap the circle and try again."); }
+    if (text) { processInput(text); setStatus("Tap the circle to speak again, Christian."); }
+    else {
+      setStatus("I didn't catch that, Christian.");
+      if (conversing) continueConversation();   // just listen again, don't nag
+    }
   } catch (e) {
     recState = "idle"; setMicUI("idle");
     setStatus("Voice model hiccup — tap the circle to try again, Christian.");
   }
+}
+
+/* Whisper hallucinates stock phrases on near-silence ("Thank you.",
+   "Thanks for watching!", subtitle credits). Treat those as nothing heard,
+   or Jarvis answers things you never said. */
+const WHISPER_GHOSTS = /^(thank you|thanks|thanks for watching|thank you for watching|you|bye|okay|ok|so|um|uh|mm|hmm|\.|,)?[.!?\s]*$/i;
+const WHISPER_CREDITS = /subtitle|amara\.org|transcri(bed|ption) by|closed caption/i;
+
+function cleanTranscript(raw) {
+  let t = (raw || "").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  if (/^\[.*\]$/.test(t)) return "";          // [BLANK_AUDIO] and friends
+  if (WHISPER_CREDITS.test(t)) return "";
+  if (WHISPER_GHOSTS.test(t)) return "";      // stock filler on silence
+  if (t.replace(/[^a-z0-9]/gi, "").length < 2) return "";
+  return t;
 }
 
 function mergeBuffers(chunks) {

@@ -68,44 +68,46 @@ Open questions are answered from **Wikipedia** live (free, no API key), so the
 range of things he knows is very wide. When nothing matches, he says so rather
 than inventing an answer.
 
-### Real AI brain — free, via Google Gemini
+### Built-in AI — no key, no signup
 
-Add a free [Google AI Studio key](https://aistudio.google.com/apikey) and open
-questions go to **Gemini** instead of Wikipedia — real conversation, follow-ups,
-writing, reasoning, opinions. Jarvis keeps the last few exchanges as context, so
-"what did I just tell you?" works.
+Jarvis is conversational out of the box. Ask it anything — opinions, explanations,
+follow-up questions — and it answers in natural spoken language, remembering the
+last few exchanges so "what did I just tell you?" works. **No API key, no account,
+nothing to sign up for.**
 
-**It is genuinely free**: Google's free tier needs no credit card and no
-billing account. There are per-minute and per-day request limits; when you hit
-one, Jarvis falls back to Wikipedia and says so, then works again later.
+It talks like a voice assistant, not a document: contractions, a sentence or two
+by default, longer only when you ask it to explain something. No markdown or
+bullet points, because everything is read aloud.
 
-**Setup:** press and hold the circle, paste a key starting `AIza`. The same box
-takes every key and routes by prefix:
+**Optional upgrades** (only if you want them) — long-press the circle and paste a
+key; it routes by prefix:
 
 | Key starts with | Goes to | Cost |
 |---|---|---|
-| `AIza` | **Google Gemini** — the AI brain | **Free** |
+| *(nothing)* | **Built-in AI** | **Free, no signup** |
+| `AIza` | Google Gemini | Free tier |
 | `sk_` | ElevenLabs — cinematic voice | Free tier, then paid |
-| `sk-ant-` | Anthropic Claude — alternative brain | Paid, no free tier |
+| `sk-ant-` | Anthropic Claude | Paid |
 
-Claude is supported but entirely optional; with both set, the free Gemini brain
-is used.
+If the AI is ever unreachable, Jarvis falls back to Wikipedia, then to its local
+skills, and says which it used. **Local commands never hit any network** — time,
+maths, timers, dice, opening sites and the weather are answered on-device.
 
-Details:
+### Hearing you accurately
 
-- Replies use the Jarvis persona, addressed to Christian, in one to three spoken
-  sentences (no markdown — it's read aloud).
-- The model is given the current date, time and weather, so it answers those
-  naturally.
-- **Local commands never reach any API** — time, maths, timers, dice, opening
-  sites and the weather are answered instantly and offline on-device.
-- If the key is rejected, a rate limit is hit, or the network fails, Jarvis
-  falls back to Wikipedia and says why on screen.
+Speech recognition runs entirely on your phone. Tuned so it actually hears you:
 
-> **Key exposure:** keys are stored only in this browser's `localStorage` and
-> sent only to the service they belong to. Never hard-code one into these files
-> — this site is public. Anyone with access to your unlocked device can read a
-> stored key, so treat it like a password and rotate it if in doubt.
+- **Larger, more accurate model** (Whisper base rather than tiny)
+- **Quieter speech registers** — a lower detection threshold
+- **It won't cut you off mid-thought** — a longer pause is allowed before it
+  decides you've finished, and questions can run up to 20 seconds
+- **Mishear filtering** — speech models invent stock phrases like "Thank you" or
+  subtitle credits when they hear near-silence; those are discarded instead of
+  answered
+- Echo cancellation so it never transcribes Jarvis's own voice
+
+> The first time you use voice, the model downloads once (~75 MB) and is then
+> cached. It's a bigger download than before, and noticeably more accurate.
 
 ### Things to say
 
