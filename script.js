@@ -21,6 +21,7 @@ let elevenSource = null;   // currently playing ElevenLabs audio
 let conversing = false;    // hands-free conversation loop is running
 let silenceStreak = 0;     // consecutive turns where nothing was heard
 let processing = false;    // an answer is being worked out
+let turnCount = 0;         // turns this conversation (hard cap, anti-loop)
 
 /* ---------- Element refs ---------- */
 const $ = (id) => document.getElementById(id);
@@ -1102,8 +1103,16 @@ if (useNative) {
   recog.onstart = () => { listening = true; setMicUI("recording"); };
   recog.onresult = (e) => { silenceStreak = 0; processInput(e.results[0][0].transcript); };
   recog.onerror = (e) => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed")
-      speak(`I could not access the microphone, ${USER_NAME}. Please grant permission and tap the circle again.`);
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      conversing = false;               // set BEFORE speaking: stops the loop
+      el.coreLabel.textContent = "STANDBY";
+      setStatus("Microphone blocked. Tap the circle to try again, Christian.");
+      speak(`I could not access the microphone, ${USER_NAME}. I'll stand by.`);
+    } else if (e.error === "aborted" || e.error === "audio-capture") {
+      conversing = false;               // never retry a broken mic
+      el.coreLabel.textContent = "STANDBY";
+      setStatus("Tap the circle to talk, Christian.");
+    }
   };
   recog.onend = () => {
     listening = false; setMicUI("idle"); populateDevices();
@@ -1190,9 +1199,14 @@ async function startRecording() {
     setStatus("Listening… tap again when you're done, Christian.");
     populateDevices();
   } catch (err) {
-    recState = "idle"; listening = false; setMicUI("idle");
-    setStatus("Microphone blocked — enable it for this site in Safari settings, Christian.");
-    speak(`I could not access the microphone, ${USER_NAME}.`);
+    // The mic is unavailable. END the conversation — never retry, or the loop
+    // would reopen the mic, fail again, and repeat forever.
+    recState = "idle"; listening = false;
+    conversing = false;                 // set BEFORE speaking: stops the loop
+    setMicUI("idle");
+    el.coreLabel.textContent = "STANDBY";
+    setStatus("Microphone blocked. Tap the circle to try again, Christian.");
+    speak(`I could not access the microphone, ${USER_NAME}. I'll stand by.`);
   }
 }
 
@@ -1289,6 +1303,7 @@ function onReactorTap() {
     conversing = true;
     activated = true;
     silenceStreak = 0;
+    turnCount = 0;
     setMicUI("idle");
     el.coreLabel.textContent = "ONLINE";
     setStatus("Conversation on — just talk. Tap again to stop.");
@@ -1301,20 +1316,33 @@ function onReactorTap() {
 
 function stopConversation(msg) {
   conversing = false;
+  turnCount = 0;
   try { if (recog && listening) recog.stop(); } catch (e) {}
   if (recState === "recording") { try { stopRecording(); } catch (e) {} }
-  try { mediaEl.pause(); } catch (e) {}
-  try { if (speechSynthesis.speaking) speechSynthesis.cancel(); } catch (e) {}
+  // Cut the voice off mid-sentence — a tap must silence him immediately.
+  try { mediaEl.pause(); mediaEl.currentTime = 0; } catch (e) {}
+  try { speechSynthesis.cancel(); } catch (e) {}
   speaking = false;
+  elevenAnalyser = null;
+  targetEnergy = 0.15;
   el.reactor.classList.remove("speaking", "listening");
   el.coreLabel.textContent = "STANDBY";
   if (msg) { addLine("jarvis", msg); setStatus("Tap the circle to talk again."); }
 }
 
-/* Called whenever Jarvis stops talking: reopen the mic so you can just reply. */
+/* Called whenever Jarvis stops talking: reopen the mic so you can just reply.
+   Hard-capped so a failing mic can never loop — the bug that made Jarvis
+   repeat "I could not access the microphone" forever. */
+const MAX_TURNS = 25;
 function continueConversation() {
   if (!conversing) return;
   if (listening || recState !== "idle" || speaking || processing) return;
+
+  turnCount++;
+  if (turnCount > MAX_TURNS) {          // absolute backstop
+    stopConversation("That's enough for now, Christian. Tap when you need me.");
+    return;
+  }
   setTimeout(() => {
     if (conversing && !speaking && !listening && recState === "idle") toggleVoice();
   }, 350);   // brief pause so the mic doesn't catch the tail of his own voice
