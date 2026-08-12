@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agentic Moat Engine</title>
+<meta name="description" content="A framework that maps the enterprise agentic-AI and cyber stack to public companies with a trust moat, high retention, high switching cost, and strong Rule of 40." />
+<meta name="theme-color" content="#0a0e14" />
+<style>
+/* =============================================================
+   AGENTIC MOAT ENGINE — self-contained, theme-aware
+   Palette validated (dataviz validator) for both modes.
+   ============================================================= */
+
+/* ---------- Light palette (bare :root) ---------- */
+:root{
+  color-scheme: light;
+  --bg:        #f5f7fa;
+  --bg-2:      #eef1f6;
+  --surface:   #ffffff;
+  --surface-2: #f1f4f9;
+  --line:      #d9e0ea;
+  --line-2:    #c6d0dd;
+  --ink:       #0c1420;
+  --ink-2:     #37475c;
+  --muted:     #667586;
+  --signal:    #0b8f86;      /* interactive cue (teal) */
+  --signal-ink:#0b8f86;
+  --moat:      #a6720c;      /* value / gold */
+  --good:      #1a7f37;
+  --warn:      #9a6700;
+  --bad:       #cf222e;
+
+  /* layer categorical (light) */
+  --L1:#2f6fd0;  /* Compute & Models   */
+  --L2:#a83f96;  /* Data & Memory      */
+  --L3:#b9660f;  /* Agents & Apps      */
+  --L4:#0f8f66;  /* Trust & Security   */
+
+  --shadow: 0 1px 2px rgba(12,20,32,.06), 0 8px 30px rgba(12,20,32,.06);
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --maxw: 1180px;
+}
+
+/* ---------- Dark palette: system-dark (un-stamped) ---------- */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:        #080b11;
+    --bg-2:      #0a0e15;
+    --surface:   #10161f;
+    --surface-2: #141c27;
+    --line:      #1e2a3a;
+    --line-2:    #2a3a4e;
+    --ink:       #e7eef6;
+    --ink-2:     #aebccd;
+    --muted:     #8493a6;
+    --signal:    #35e0d0;
+    --signal-ink:#4fe9db;
+    --moat:      #e6b23c;
+    --good:      #3fb950;
+    --warn:      #d6a726;
+    --bad:       #f0636e;
+    --L1:#3d90e8;
+    --L2:#c25bb0;
+    --L3:#cf7a1f;
+    --L4:#17a074;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 18px 50px rgba(0,0,0,.45);
+  }
+}
+/* ---------- Dark palette: explicitly toggled ---------- */
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#080b11; --bg-2:#0a0e15; --surface:#10161f; --surface-2:#141c27;
+  --line:#1e2a3a; --line-2:#2a3a4e; --ink:#e7eef6; --ink-2:#aebccd; --muted:#8493a6;
+  --signal:#35e0d0; --signal-ink:#4fe9db; --moat:#e6b23c;
+  --good:#3fb950; --warn:#d6a726; --bad:#f0636e;
+  --L1:#3d90e8; --L2:#c25bb0; --L3:#cf7a1f; --L4:#17a074;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 18px 50px rgba(0,0,0,.45);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--sans); line-height:1.55;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+h1,h2,h3{font-weight:760; letter-spacing:-.02em; text-wrap:balance; margin:0}
+a{color:inherit}
+.mono{font-family:var(--mono)}
+.eyebrow{
+  font-family:var(--mono); font-size:.72rem; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--muted);
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+section{position:relative}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ===================== NAV ===================== */
+.nav{
+  position:sticky; top:0; z-index:60;
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  background:color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom:1px solid var(--line);
+}
+.nav-in{display:flex; align-items:center; gap:20px; height:60px}
+.brand{display:flex; align-items:center; gap:10px; font-weight:750; letter-spacing:-.01em}
+.brand .glyph{
+  width:26px;height:26px;border-radius:7px;flex:none;
+  background:
+    radial-gradient(circle at 50% 50%, var(--signal) 0 22%, transparent 24%),
+    conic-gradient(from 0deg, var(--L1),var(--L2),var(--L3),var(--L4),var(--L1));
+  box-shadow:0 0 0 1px var(--line-2) inset;
+  animation:spin 14s linear infinite;
+}
+.brand small{font-family:var(--mono); font-weight:500; color:var(--muted); font-size:.68rem; letter-spacing:.12em}
+.nav-links{display:flex; gap:22px; margin-left:auto; align-items:center}
+.nav-links a{
+  font-family:var(--mono); font-size:.78rem; color:var(--ink-2);
+  text-decoration:none; letter-spacing:.02em; transition:color .18s;
+}
+.nav-links a:hover{color:var(--signal-ink)}
+.theme-btn{
+  font-family:var(--mono); font-size:.72rem; cursor:pointer;
+  background:var(--surface-2); color:var(--ink-2);
+  border:1px solid var(--line); border-radius:8px; padding:7px 11px;
+  transition:border-color .18s, color .18s;
+}
+.theme-btn:hover{border-color:var(--signal); color:var(--signal-ink)}
+@media(max-width:820px){ .nav-links a:not(.keep){display:none} }
+
+/* ===================== HERO ===================== */
+.hero{position:relative; overflow:hidden; border-bottom:1px solid var(--line)}
+#net{position:absolute; inset:0; width:100%; height:100%; display:block}
+.hero-grad{
+  position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(1200px 500px at 78% -10%, color-mix(in srgb,var(--L4) 20%, transparent), transparent 60%),
+    radial-gradient(1000px 500px at 8% 8%, color-mix(in srgb,var(--L1) 16%, transparent), transparent 55%),
+    linear-gradient(180deg, transparent 40%, var(--bg) 98%);
+}
+.hero-in{position:relative; z-index:2; padding:78px 0 66px}
+.hero h1{
+  font-size:clamp(2.5rem, 6.2vw, 5rem); line-height:.98; margin:.5rem 0 0;
+}
+.hero h1 .accent{
+  background:linear-gradient(92deg, var(--signal-ink), var(--moat));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.hero .lede{
+  max-width:60ch; margin:22px 0 0; font-size:clamp(1.02rem,1.6vw,1.24rem);
+  color:var(--ink-2);
+}
+.hero .lede b{color:var(--ink); font-weight:640}
+.cta-row{display:flex; flex-wrap:wrap; gap:12px; margin-top:30px}
+.btn{
+  font-family:var(--mono); font-size:.82rem; letter-spacing:.02em;
+  padding:12px 18px; border-radius:11px; cursor:pointer; text-decoration:none;
+  display:inline-flex; align-items:center; gap:9px; border:1px solid var(--line-2);
+  transition:transform .15s, border-color .18s, background .18s;
+}
+.btn:hover{transform:translateY(-2px)}
+.btn.primary{background:var(--signal); color:#04120f; border-color:transparent; font-weight:640}
+:root[data-theme="dark"] .btn.primary, :root:not([data-theme="light"]) .btn.primary{color:#04120f}
+.btn.ghost{background:color-mix(in srgb,var(--surface) 70%, transparent); color:var(--ink)}
+.btn.ghost:hover{border-color:var(--signal)}
+
+.kpis{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:44px;
+}
+.kpi{
+  background:color-mix(in srgb,var(--surface) 72%, transparent);
+  border:1px solid var(--line); border-radius:14px; padding:16px 16px 14px;
+  backdrop-filter:blur(6px);
+}
+.kpi .num{font-family:var(--mono); font-size:1.9rem; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.kpi .cap{font-family:var(--mono); font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-top:2px}
+@media(max-width:720px){ .kpis{grid-template-columns:repeat(2,1fr)} }
+
+/* ===================== SECTION SHELL ===================== */
+.block{padding:82px 0}
+.block-head{max-width:70ch}
+.block-head h2{font-size:clamp(1.7rem,3.4vw,2.6rem); margin-top:10px}
+.block-head p{color:var(--ink-2); margin:14px 0 0; font-size:1.05rem}
+.reveal{opacity:0; transform:translateY(18px); transition:opacity .7s ease, transform .7s ease}
+.reveal.in{opacity:1; transform:none}
+@media(prefers-reduced-motion:reduce){
+  .reveal{opacity:1; transform:none; transition:none}
+  .brand .glyph{animation:none}
+  html{scroll-behavior:auto}
+}
+
+/* ===================== BLUEPRINTS ===================== */
+.bp-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:34px}
+@media(max-width:780px){ .bp-grid{grid-template-columns:1fr} }
+.bp{
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  padding:22px; box-shadow:var(--shadow);
+}
+.bp h3{font-size:1.15rem; display:flex; align-items:center; gap:10px}
+.bp .src{font-family:var(--mono); font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+.bp ul{list-style:none; padding:0; margin:14px 0 0; display:grid; gap:9px}
+.bp li{position:relative; padding-left:20px; font-size:.92rem; color:var(--ink-2)}
+.bp li::before{content:"▸"; position:absolute; left:0; top:0; color:var(--signal-ink); font-family:var(--mono)}
+.bp li b{color:var(--ink)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+
+/* ===================== STACK ===================== */
+.stack-tools{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:26px 0 18px}
+.chip{
+  font-family:var(--mono); font-size:.74rem; letter-spacing:.02em;
+  padding:8px 13px; border-radius:999px; cursor:pointer; user-select:none;
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink-2);
+  transition:all .16s;
+}
+.chip[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+.chip.map[aria-pressed="true"]{background:var(--signal); color:#04120f; border-color:transparent}
+.chip:hover{transform:translateY(-1px)}
+.stack{display:grid; gap:12px}
+.layer{
+  --c:var(--L1);
+  position:relative; display:grid; grid-template-columns:56px 1fr auto; gap:18px; align-items:center;
+  background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--c);
+  border-radius:14px; padding:18px 20px; cursor:pointer;
+  transition:transform .18s, box-shadow .18s, border-color .18s, background .18s;
+}
+.layer:hover{transform:translateX(4px); box-shadow:var(--shadow)}
+.layer .lyr-idx{font-family:var(--mono); font-size:1.5rem; font-weight:600; color:var(--c); opacity:.9}
+.layer h3{font-size:1.16rem}
+.layer .lyr-map{font-family:var(--mono); font-size:.82rem; color:var(--ink-2); margin-top:5px}
+.layer .lyr-tag{
+  font-family:var(--mono); font-size:.64rem; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--c); border:1px solid color-mix(in srgb,var(--c) 45%, var(--line));
+  border-radius:999px; padding:5px 10px; white-space:nowrap;
+}
+.layer .go{font-family:var(--mono); font-size:.72rem; color:var(--muted); margin-top:6px}
+.layer:hover .go{color:var(--signal-ink)}
+@media(max-width:640px){
+  .layer{grid-template-columns:40px 1fr; gap:12px; padding:15px}
+  .layer .lyr-tag{display:none}
+}
+
+/* ===================== FOUR TESTS ===================== */
+.tests{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:34px}
+@media(max-width:900px){ .tests{grid-template-columns:repeat(2,1fr)} }
+@media(max-width:520px){ .tests{grid-template-columns:1fr} }
+.test{
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  padding:22px; box-shadow:var(--shadow); position:relative; overflow:hidden;
+}
+.test .n{font-family:var(--mono); font-size:.72rem; color:var(--muted)}
+.test h3{font-size:1.1rem; margin:6px 0 4px}
+.test p{font-size:.88rem; color:var(--ink-2); margin:8px 0 16px}
+.meter{height:8px; border-radius:99px; background:var(--surface-2); overflow:hidden}
+.meter i{display:block; height:100%; width:0; border-radius:99px;
+  background:linear-gradient(90deg,var(--signal),var(--moat)); transition:width 1.1s cubic-bezier(.2,.7,.2,1)}
+.test .val{font-family:var(--mono); font-size:.72rem; color:var(--ink-2); margin-top:8px; display:flex; justify-content:space-between}
+
+/* ===================== SCREENER ===================== */
+.screen-tools{
+  display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:26px 0 22px;
+  position:sticky; top:60px; z-index:40; padding:12px 0;
+  background:color-mix(in srgb,var(--bg) 90%, transparent);
+}
+.filters{display:flex; flex-wrap:wrap; gap:8px}
+.search{
+  font-family:var(--mono); font-size:.78rem; padding:9px 12px; border-radius:10px;
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink); min-width:150px;
+}
+.search::placeholder{color:var(--muted)}
+.sortsel{
+  font-family:var(--mono); font-size:.76rem; padding:9px 12px; border-radius:10px;
+  border:1px solid var(--line-2); background:var(--surface); color:var(--ink); cursor:pointer; margin-left:auto;
+}
+.count{font-family:var(--mono); font-size:.72rem; color:var(--muted)}
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px}
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:16px;
+  padding:18px; cursor:pointer; position:relative; overflow:hidden;
+  box-shadow:var(--shadow); transition:transform .18s, border-color .18s;
+  animation:pop .45s both;
+}
+.card:hover{transform:translateY(-4px); border-color:color-mix(in srgb,var(--c) 55%, var(--line))}
+.card{--c:var(--L1)}
+.card::before{content:""; position:absolute; top:0; left:0; right:0; height:3px; background:var(--c)}
+.card-top{display:flex; align-items:flex-start; gap:12px}
+.tick{
+  font-family:var(--mono); font-weight:640; font-size:.86rem; letter-spacing:.03em;
+  padding:6px 9px; border-radius:8px; color:#fff; background:var(--c); white-space:nowrap;
+}
+.card h3{font-size:1.02rem; line-height:1.2}
+.card .co-name{color:var(--ink)}
+.card .lyr{font-family:var(--mono); font-size:.64rem; letter-spacing:.08em; text-transform:uppercase; color:var(--c); margin-top:3px}
+.ring{margin-left:auto; flex:none; width:52px; height:52px; position:relative}
+.ring svg{transform:rotate(-90deg)}
+.ring .rv{
+  position:absolute; inset:0; display:grid; place-items:center;
+  font-family:var(--mono); font-weight:640; font-size:1.02rem; font-variant-numeric:tabular-nums;
+}
+.bars{margin-top:16px; display:grid; gap:9px}
+.brow{display:grid; grid-template-columns:74px 1fr 40px; gap:10px; align-items:center}
+.brow .bl{font-family:var(--mono); font-size:.64rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+.brow .bt{height:6px; border-radius:99px; background:var(--surface-2); overflow:hidden}
+.brow .bt i{display:block; height:100%; width:0; border-radius:99px; background:var(--c); transition:width .9s cubic-bezier(.2,.7,.2,1)}
+.brow .bn{font-family:var(--mono); font-size:.72rem; text-align:right; color:var(--ink-2); font-variant-numeric:tabular-nums}
+.card-foot{display:flex; gap:8px; margin-top:15px; flex-wrap:wrap}
+.pill{
+  font-family:var(--mono); font-size:.68rem; padding:5px 9px; border-radius:8px;
+  border:1px solid var(--line); color:var(--ink-2); background:var(--surface-2);
+  font-variant-numeric:tabular-nums;
+}
+.pill b{color:var(--ink); font-weight:640}
+.pill.good b{color:var(--good)} .pill.warn b{color:var(--warn)} .pill.bad b{color:var(--bad)}
+.detail{
+  display:grid; grid-template-rows:0fr; transition:grid-template-rows .35s ease;
+}
+.detail>div{overflow:hidden}
+.card.open .detail{grid-template-rows:1fr; margin-top:14px}
+.detail p{font-size:.86rem; color:var(--ink-2); margin:0 0 8px}
+.detail .mech{font-family:var(--mono); font-size:.72rem; color:var(--signal-ink)}
+
+/* ===================== SCATTER ===================== */
+.scatter-wrap{margin-top:30px; background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:22px; box-shadow:var(--shadow)}
+.legend{display:flex; flex-wrap:wrap; gap:16px; margin-bottom:8px}
+.legend span{font-family:var(--mono); font-size:.74rem; color:var(--ink-2); display:flex; align-items:center; gap:7px}
+.legend i{width:12px;height:12px;border-radius:3px}
+.chart-scroll{overflow-x:auto}
+#scatter{width:100%; height:auto; display:block; min-width:520px}
+#scatter text{font-family:var(--mono); fill:var(--muted)}
+.tip{
+  position:fixed; z-index:80; pointer-events:none; opacity:0; transition:opacity .12s;
+  background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
+  padding:9px 11px; box-shadow:var(--shadow); font-family:var(--mono); font-size:.72rem; color:var(--ink);
+  max-width:220px;
+}
+.tip b{color:var(--signal-ink)}
+.quad{font-family:var(--mono); font-size:11px; letter-spacing:.05em}
+
+/* ===================== METHOD / FOOTER ===================== */
+.method{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:30px}
+@media(max-width:780px){ .method{grid-template-columns:1fr} }
+.mcard{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:22px}
+.mcard h3{font-size:1.05rem; margin-bottom:8px}
+.mcard p, .mcard li{font-size:.9rem; color:var(--ink-2)}
+.mcard ul{padding-left:18px; margin:8px 0 0; display:grid; gap:6px}
+.mcard code{font-family:var(--mono); font-size:.82rem; background:var(--surface-2); padding:2px 6px; border-radius:6px; color:var(--ink)}
+.disclaimer{
+  margin-top:26px; border:1px dashed var(--line-2); border-radius:14px; padding:18px 20px;
+  background:color-mix(in srgb,var(--warn) 8%, var(--surface));
+  font-size:.85rem; color:var(--ink-2);
+}
+.disclaimer b{color:var(--ink)}
+footer{border-top:1px solid var(--line); padding:34px 0; margin-top:20px}
+.foot-in{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
+.foot-in p{font-family:var(--mono); font-size:.72rem; color:var(--muted); margin:0}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pop{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none}}
+</style>
+</head>
+<body>
+
+<!-- ===================== NAV ===================== -->
+<nav class="nav">
+  <div class="wrap nav-in">
+    <div class="brand"><span class="glyph"></span> Agentic&nbsp;Moat&nbsp;Engine <small>SYNORA&nbsp;RESEARCH</small></div>
+    <div class="nav-links">
+      <a href="#framework">Framework</a>
+      <a href="#tests">The Four Tests</a>
+      <a href="#screener" class="keep">Screener</a>
+      <a href="#rule40">Rule of 40</a>
+      <button class="theme-btn" id="themeBtn" aria-label="Toggle colour theme">◐ Theme</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ===================== HERO ===================== -->
+<header class="hero">
+  <canvas id="net" aria-hidden="true"></canvas>
+  <div class="hero-grad"></div>
+  <div class="wrap hero-in">
+    <div class="eyebrow reveal">The interconnection of agentic software &amp; cyber</div>
+    <h1 class="reveal">Find the layers that<br><span class="accent">own the trust.</span></h1>
+    <p class="lede reveal">
+      Enterprise AI is collapsing into agent stacks — a <b>supervisor</b> orchestrating
+      specialised sub-agents over governed data, wrapped in a <b>security, governance and
+      trust</b> spine. This engine maps that stack to public companies and screens them on the
+      only four things that make software durable: a <b>trust moat</b>, <b>net-revenue
+      retention</b>, <b>switching cost</b>, and the <b>Rule&nbsp;of&nbsp;40</b>.
+    </p>
+    <div class="cta-row reveal">
+      <a class="btn primary" href="#screener">▚ Open the screener</a>
+      <a class="btn ghost" href="#framework">Explore the stack →</a>
+    </div>
+    <div class="kpis">
+      <div class="kpi reveal"><div class="num" data-count="24">0</div><div class="cap">Companies screened</div></div>
+      <div class="kpi reveal"><div class="num" data-count="113" data-suffix="%">0</div><div class="cap">Median NRR</div></div>
+      <div class="kpi reveal"><div class="num" data-count="52" data-suffix="">0</div><div class="cap">Median Rule of 40</div></div>
+      <div class="kpi reveal"><div class="num" data-count="4">0</div><div class="cap">Moat layers</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== FRAMEWORK ===================== -->
+<section class="block" id="framework">
+  <div class="wrap">
+    <div class="block-head reveal">
+      <div class="eyebrow">01 · The framework</div>
+      <h2>Two enterprise blueprints, one moat map.</h2>
+      <p>
+        Your source material — J.P.&nbsp;Morgan's <b>AskDavid</b> multi-agent design and
+        BlackRock's <b>RockAI&nbsp;/&nbsp;Aladdin</b> platform for regulated industries — describe
+        the same shape from two directions. Collapse them and you get four investable layers.
+        The higher the layer, the closer to the <b>trust moat</b>.
+      </p>
+    </div>
+
+    <div class="bp-grid">
+      <div class="bp reveal">
+        <div class="src">Source · J.P. Morgan</div>
+        <h3><span class="dot" style="background:var(--L3)"></span> AskDavid — the multi-agent approach</h3>
+        <ul>
+          <li><b>Supervisor Agent</b> orchestrates, plans, keeps a human in the loop &amp; holds long-term memory.</li>
+          <li>Specialised <b>sub-agents</b>: Structured-Data (NL→SQL/GraphQL), Unstructured-Data, Analytics.</li>
+          <li>A <b>Reflection</b> loop checks accuracy &amp; reliability before answering.</li>
+          <li>Memory + RAG: docs → chunking → indexing → embedding.</li>
+        </ul>
+      </div>
+      <div class="bp reveal">
+        <div class="src">Source · BlackRock</div>
+        <h3><span class="dot" style="background:var(--L4)"></span> RockAI by Aladdin — regulated-industry platform</h3>
+        <ul>
+          <li>Layered stack: Presentation → Agents → Models → Datasets.</li>
+          <li><b>Trustworthy AI</b>: evaluation, guardrails, observability.</li>
+          <li><b>Security, Governance &amp; Compliance</b> spine: RBAC, encryption, SR&nbsp;26-2 / OCC / EU&nbsp;AI&nbsp;Act / GDPR.</li>
+          <li><b>Audit &amp; Traceability</b>: monitoring, compliance logging, DR/HA.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="stack-tools reveal">
+      <span class="eyebrow" style="margin-right:4px">Map the layers via</span>
+      <button class="chip map" data-map="askdavid" aria-pressed="true">AskDavid lens</button>
+      <button class="chip map" data-map="rockai" aria-pressed="false">RockAI lens</button>
+      <span class="count" style="margin-left:8px">click a layer to screen it →</span>
+    </div>
+
+    <div class="stack" id="stack"><!-- layers injected --></div>
+  </div>
+</section>
+
+<!-- ===================== FOUR TESTS ===================== -->
+<section class="block" id="tests" style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="block-head reveal">
+      <div class="eyebrow">02 · The screen</div>
+      <h2>Four tests for a business that compounds.</h2>
+      <p>A durable software franchise doesn't just grow — it grows on top of revenue it never loses,
+         inside systems customers can't cheaply leave. Each company is scored on all four, then blended
+         into a single <b>Moat&nbsp;Score</b>.</p>
+    </div>
+    <div class="tests">
+      <div class="test reveal"><div class="n">Test 01</div><h3>Trust Moat</h3>
+        <p>Would ripping this out put the customer's security, compliance or data integrity at risk? Trust is the deepest moat in regulated AI.</p>
+        <div class="meter"><i data-w="92"></i></div>
+        <div class="val"><span>Weight in score</span><span>30%</span></div></div>
+      <div class="test reveal"><div class="n">Test 02</div><h3>Net Revenue Retention</h3>
+        <p>Does the same customer spend more each year? NRR&nbsp;&gt;&nbsp;110% means growth compounds before a single new logo is won.</p>
+        <div class="meter"><i data-w="80"></i></div>
+        <div class="val"><span>Weight in score</span><span>24%</span></div></div>
+      <div class="test reveal"><div class="n">Test 03</div><h3>Switching Cost</h3>
+        <p>Data gravity, integrations, workflow and habit. The harder the exit, the more pricing power and the flatter the churn curve.</p>
+        <div class="meter"><i data-w="86"></i></div>
+        <div class="val"><span>Weight in score</span><span>24%</span></div></div>
+      <div class="test reveal"><div class="n">Test 04</div><h3>Rule of 40</h3>
+        <p>Revenue growth&nbsp;% + free-cash-flow margin&nbsp;% ≥ 40. The discipline test: growth that isn't bought with permanent losses.</p>
+        <div class="meter"><i data-w="65"></i></div>
+        <div class="val"><span>Weight in score</span><span>22%</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SCREENER ===================== -->
+<section class="block" id="screener">
+  <div class="wrap">
+    <div class="block-head reveal">
+      <div class="eyebrow">03 · The screener</div>
+      <h2>The company screen.</h2>
+      <p>Filter by moat layer, search a ticker, and sort by the metric you care about. Click any card to
+         see <b>why</b> the moat holds and the mechanism that raises switching cost.</p>
+    </div>
+
+    <div class="screen-tools">
+      <div class="filters" id="filters"><!-- filter chips injected --></div>
+      <select class="sortsel" id="sort" aria-label="Sort companies">
+        <option value="score">Sort: Moat Score</option>
+        <option value="nrr">Sort: NRR</option>
+        <option value="sw">Sort: Switching cost</option>
+        <option value="moat">Sort: Trust moat</option>
+        <option value="r40">Sort: Rule of 40</option>
+      </select>
+      <input class="search" id="search" type="search" placeholder="search ticker / name…" aria-label="Search" />
+    </div>
+    <div class="count" id="count" style="margin:-8px 0 16px"></div>
+    <div class="grid" id="grid"><!-- cards injected --></div>
+  </div>
+</section>
+
+<!-- ===================== RULE OF 40 ===================== -->
+<section class="block" id="rule40" style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="block-head reveal">
+      <div class="eyebrow">04 · Rule of 40</div>
+      <h2>Growth vs. profitability — who earns the right to compound.</h2>
+      <p>Each dot is a company: revenue growth on the x-axis, free-cash-flow margin on the y-axis.
+         The diagonal is the <b>Rule&nbsp;of&nbsp;40</b> line. Everything above it clears the bar; dot
+         size is the blended Moat&nbsp;Score. Hover for detail.</p>
+    </div>
+    <div class="scatter-wrap reveal">
+      <div class="legend" id="legend"></div>
+      <div class="chart-scroll">
+        <svg id="scatter" viewBox="0 0 760 460" role="img" aria-label="Scatter plot of revenue growth versus free cash flow margin"></svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== METHODOLOGY ===================== -->
+<section class="block" id="method">
+  <div class="wrap">
+    <div class="block-head reveal">
+      <div class="eyebrow">05 · Methodology &amp; honesty</div>
+      <h2>How the score is built.</h2>
+    </div>
+    <div class="method">
+      <div class="mcard reveal">
+        <h3>The Moat Score</h3>
+        <p>Each company carries four inputs. Retention and Rule&nbsp;of&nbsp;40 are normalised to 0–100, then blended:</p>
+        <p><code>Score = 0.30·TrustMoat + 0.24·Switching + 0.24·NRRₙ + 0.22·R40ₙ</code></p>
+        <ul>
+          <li><b>NRRₙ</b> maps 95%→0 and 130%→100.</li>
+          <li><b>R40ₙ</b> maps a Rule-of-40 sum of 0→0 and 80→100.</li>
+          <li>Where NRR isn't disclosed (mega-caps), its weight is redistributed across the other three.</li>
+        </ul>
+      </div>
+      <div class="mcard reveal">
+        <h3>Where a trust moat actually lives</h3>
+        <p>The thesis from your two blueprints: durable value accretes to the <b>upper layers</b> —
+           the data substrate agents reason over, and the security / governance / trust spine that
+           regulated buyers can't operate without. These are the layers with the highest switching cost
+           and the flattest churn.</p>
+        <p class="mono" style="color:var(--signal-ink); font-size:.8rem">Trust &amp; Security ▸ Data &amp; Memory ▸ Agents &amp; Apps ▸ Compute &amp; Models</p>
+      </div>
+    </div>
+
+    <div class="disclaimer reveal">
+      <b>Read me before you trade.</b> This is a research framework, not investment advice. The financial
+      figures (growth, FCF margin, NRR) are <b>directional estimates</b> assembled to illustrate the
+      method — approximate last-reported ranges, not live or audited data — and the Trust-Moat and
+      Switching-Cost scores are <b>qualitative judgements</b> on a 0–100 scale. Verify every number against
+      current filings before making any decision. Tickers are for identification only.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <p>Agentic Moat Engine · built from the AskDavid &amp; RockAI blueprints</p>
+    <p>Synora Research · framework &amp; illustrative data only</p>
+  </div>
+</footer>
+
+<div class="tip" id="tip"></div>
+
+<script>
+/* =============================================================
+   DATA — directional / illustrative (see disclaimer)
+   layer: 1 Compute&Models · 2 Data&Memory · 3 Agents&Apps · 4 Trust&Security
+   moat/sw: 0-100 · nrr: % (null if undisclosed) · g: rev growth % · m: FCF margin %
+   ============================================================= */
+const LAYERS = {
+  1:{name:"Compute & Models",  key:"L1",
+     askdavid:"LLM inference, summarisation & embeddings — the reasoning engine.",
+     rockai:"Models — self-hosted & provider/vendor-hosted (Bedrock, Vertex, Azure ML); training & fine-tuning.",
+     tag:"Substrate"},
+  2:{name:"Data & Memory",     key:"L2",
+     askdavid:"Long-term memory + RAG: sources → chunking → indexing → embedding.",
+     rockai:"Datasets — uploader, processor, versioning; the governed data layer.",
+     tag:"Data gravity"},
+  3:{name:"Agents & Applications", key:"L3",
+     askdavid:"Supervisor + Structured / Unstructured / Analytics sub-agents & reflection.",
+     rockai:"Agents (tools, dev, mgmt, deploy) + Presentation — WebApp / SDK / API.",
+     tag:"Workflow"},
+  4:{name:"Trust, Security & Governance", key:"L4",
+     askdavid:"Human-in-the-loop, reflection & reliability checks around the answer.",
+     rockai:"Security-Governance spine + Trustworthy AI (eval, guardrails, observability) + Audit.",
+     tag:"The trust moat"}
+};
+
+const DATA = [
+  // Layer 4 — Trust, Security & Governance
+  {t:"CRWD",n:"CrowdStrike",l:4,moat:95,nrr:112,sw:88,g:30,m:30,
+   why:"A single Falcon agent feeds every security module through one Threat Graph — ripping it out is an existential re-architecture.",mech:"One sensor + shared threat graph"},
+  {t:"PANW",n:"Palo Alto Networks",l:4,moat:90,nrr:106,sw:85,g:15,m:33,
+   why:"Platformization bundles network, cloud and SecOps into consolidated multi-year contracts that are painful to unwind.",mech:"Platform bundling & consolidation"},
+  {t:"ZS",n:"Zscaler",l:4,moat:87,nrr:114,sw:82,g:26,m:26,
+   why:"An inline zero-trust proxy sits directly in the traffic path; removing it means re-architecting corporate connectivity.",mech:"Traffic-path integration"},
+  {t:"CYBR",n:"CyberArk",l:4,moat:92,nrr:110,sw:90,g:30,m:22,
+   why:"Privileged-access vaults are wired into every critical system; migrating risks breaking authentication everywhere at once.",mech:"Privileged-access vaults"},
+  {t:"OKTA",n:"Okta",l:4,moat:82,nrr:106,sw:84,g:12,m:26,
+   why:"The identity fabric brokers every application login — it becomes the company's front door for employees and customers.",mech:"Identity fabric / SSO of record"},
+  {t:"DDOG",n:"Datadog",l:4,moat:85,nrr:115,sw:86,g:25,m:28,
+   why:"Instrumentation reaches every service; dashboards, monitors and on-call runbooks encode a team's institutional memory.",mech:"Deep instrumentation & on-call memory"},
+  {t:"NET",n:"Cloudflare",l:4,moat:86,nrr:111,sw:78,g:28,m:12,
+   why:"The global edge sits in front of the whole property — DNS, WAF and Zero Trust converge on one control plane.",mech:"Edge in front of everything"},
+  {t:"S",n:"SentinelOne",l:4,moat:78,nrr:110,sw:72,g:30,m:4,
+   why:"Autonomous endpoint agent with a security data lake; a consolidation challenger with retention climbing as the platform widens.",mech:"Autonomous agent + data lake"},
+  // Layer 2 — Data & Memory
+  {t:"SNOW",n:"Snowflake",l:2,moat:83,nrr:126,sw:88,g:28,m:25,
+   why:"Data gravity: once the governed copy lives here, compute, sharing and native apps accrete on top and rarely leave.",mech:"Data gravity & sharing network"},
+  {t:"MDB",n:"MongoDB",l:2,moat:78,nrr:115,sw:84,g:20,m:12,
+   why:"The developer-default document model — applications are written against its API, not casually ported off it.",mech:"App code written to its API"},
+  {t:"CFLT",n:"Confluent",l:2,moat:76,nrr:117,sw:80,g:22,m:6,
+   why:"Kafka streams become the central nervous system; every producer and consumer would have to be rewired to leave.",mech:"Streaming backbone rewiring"},
+  {t:"ESTC",n:"Elastic",l:2,moat:74,nrr:112,sw:76,g:16,m:15,
+   why:"Search and observability on one engine; query DSL, mappings and dashboards make the data layer sticky.",mech:"Query DSL & index mappings"},
+  // Layer 3 — Agents & Applications
+  {t:"PLTR",n:"Palantir",l:3,moat:90,nrr:120,sw:90,g:40,m:40,
+   why:"The Ontology binds data, logic and actions into one model that agents operate on — the deepest workflow lock-in here.",mech:"Ontology lock-in"},
+  {t:"NOW",n:"ServiceNow",l:3,moat:91,nrr:98,sw:92,g:22,m:31,
+   why:"The system of record for enterprise workflow; every automation built on it deepens the moat and raises exit cost.",mech:"Workflow system of record"},
+  {t:"CRM",n:"Salesforce",l:3,moat:84,nrr:108,sw:88,g:9,m:33,
+   why:"The revenue system of record — data, customisations and a huge integration ecosystem compound switching cost.",mech:"CRM of record + integrations"},
+  {t:"TEAM",n:"Atlassian",l:3,moat:80,nrr:112,sw:82,g:20,m:25,
+   why:"Jira and Confluence hold the organisation's work graph; the lock-in is the team's daily habits and history.",mech:"Org work-graph & habit"},
+  {t:"GTLB",n:"GitLab",l:3,moat:76,nrr:121,sw:78,g:29,m:10,
+   why:"A single DevSecOps application houses the whole software lifecycle — retention sits among the highest on this list.",mech:"Whole SDLC in one place"},
+  {t:"ADBE",n:"Adobe",l:3,moat:83,nrr:null,sw:80,g:11,m:36,
+   why:"Creative and document standards: the file formats and the trained-in skills are the moat as much as the software.",mech:"Format & skill standards"},
+  {t:"WDAY",n:"Workday",l:3,moat:85,nrr:95,sw:90,g:15,m:25,
+   why:"HR and finance system of record; payroll and org data make a migration a board-level, multi-year event.",mech:"HR/Fin system of record"},
+  {t:"INTU",n:"Intuit",l:3,moat:88,nrr:null,sw:86,g:13,m:30,
+   why:"SMB finance and tax rails — QuickBooks and TurboTax own both the workflow and the accumulated financial data.",mech:"SMB finance & tax rails"},
+  // Layer 1 — Compute & Models
+  {t:"NVDA",n:"NVIDIA",l:1,moat:93,nrr:null,sw:88,g:55,m:45,
+   why:"CUDA plus the surrounding ecosystem: the models everyone builds are effectively compiled down to its stack.",mech:"CUDA ecosystem lock-in"},
+  {t:"MSFT",n:"Microsoft",l:1,moat:94,nrr:null,sw:95,g:15,m:34,
+   why:"Identity, productivity, cloud and Copilot bundled into the enterprise default that spans every layer of this stack.",mech:"Enterprise default bundle"},
+  {t:"GOOGL",n:"Alphabet",l:1,moat:90,nrr:null,sw:82,g:14,m:30,
+   why:"Search, ads and Cloud/Vertex distribution sit on proprietary data and frontier models at planetary scale.",mech:"Proprietary data + distribution"},
+  {t:"AMZN",n:"Amazon",l:1,moat:88,nrr:null,sw:80,g:11,m:12,
+   why:"AWS is the substrate and Bedrock hosts the models regulated buyers actually deploy behind their own controls.",mech:"Cloud substrate + Bedrock"}
+];
+
+/* ---------- derived metrics ---------- */
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const r40=c=>c.g+c.m;
+const nrrNorm=c=>c.nrr==null?null:clamp((c.nrr-95)/(130-95)*100,0,100);
+const r40Norm=c=>clamp(r40(c)/80*100,0,100);
+function score(c){
+  const parts=[[0.30,c.moat],[0.24,c.sw],[0.24,nrrNorm(c)],[0.22,r40Norm(c)]];
+  let w=0,a=0;
+  for(const [wt,v] of parts){ if(v==null) continue; w+=wt; a+=wt*v; }
+  return Math.round(a/w);
+}
+DATA.forEach(c=>{ c.r40=r40(c); c.score=score(c); c.cvar=`var(--${LAYERS[c.l].key})`; });
+
+/* =============================================================
+   HERO — agent interconnection network on canvas
+   ============================================================= */
+(function(){
+  const cv=document.getElementById('net'), ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,dpr,nodes=[],pulses=[];
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function resize(){
+    const r=cv.getBoundingClientRect(); dpr=Math.min(devicePixelRatio||1,2);
+    W=r.width; H=r.height; cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function build(){
+    const n=Math.round(clamp(W/26,20,54)); nodes=[];
+    for(let i=0;i<n;i++){
+      nodes.push({x:Math.random()*W,y:Math.random()*H,
+        vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,
+        r:Math.random()*1.8+1.1, hub:Math.random()<.16});
+    }
+  }
+  function colors(){ return [css('--L1'),css('--L2'),css('--L3'),css('--L4')]; }
+  let pal=colors();
+  function step(){
+    ctx.clearRect(0,0,W,H);
+    const D=Math.min(W,H)*0.17, ink=css('--muted');
+    for(const p of nodes){ p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>W)p.vx*=-1; if(p.y<0||p.y>H)p.vy*=-1; }
+    // edges
+    for(let i=0;i<nodes.length;i++){
+      for(let j=i+1;j<nodes.length;j++){
+        const a=nodes[i],b=nodes[j], dx=a.x-b.x,dy=a.y-b.y, d=Math.hypot(dx,dy);
+        if(d<D){ ctx.globalAlpha=(1-d/D)*.22; ctx.strokeStyle=ink; ctx.lineWidth=1;
+          ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+          if(!reduce && Math.random()<0.0009) pulses.push({a,b,t:0});
+        }
+      }
+    }
+    // pulses travelling agent→agent
+    for(let k=pulses.length-1;k>=0;k--){
+      const pu=pulses[k]; pu.t+=0.03;
+      if(pu.t>=1){ pulses.splice(k,1); continue; }
+      const x=pu.a.x+(pu.b.x-pu.a.x)*pu.t, y=pu.a.y+(pu.b.y-pu.a.y)*pu.t;
+      ctx.globalAlpha=.9; ctx.fillStyle=css('--signal');
+      ctx.beginPath(); ctx.arc(x,y,2.1,0,7); ctx.fill();
+    }
+    // nodes
+    for(let i=0;i<nodes.length;i++){ const p=nodes[i];
+      ctx.globalAlpha=p.hub?.95:.6;
+      ctx.fillStyle=p.hub?pal[i%4]:ink;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.hub?p.r+1.2:p.r,0,7); ctx.fill();
+      if(p.hub){ ctx.globalAlpha=.18; ctx.beginPath(); ctx.arc(p.x,p.y,p.r+6,0,7); ctx.fill(); }
+    }
+    ctx.globalAlpha=1;
+    if(!reduce) raf=requestAnimationFrame(step);
+  }
+  let raf;
+  function boot(){ resize(); build(); pal=colors(); cancelAnimationFrame(raf); step(); }
+  addEventListener('resize',()=>{ resize(); build(); });
+  new MutationObserver(()=>{pal=colors();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  boot();
+})();
+
+/* =============================================================
+   THEME TOGGLE
+   ============================================================= */
+(function(){
+  const btn=document.getElementById('themeBtn'), root=document.documentElement;
+  const sysDark=matchMedia('(prefers-color-scheme: dark)');
+  function cur(){ return root.dataset.theme || (sysDark.matches?'dark':'light'); }
+  btn.addEventListener('click',()=>{
+    root.dataset.theme = cur()==='dark'?'light':'dark';
+    paintScatter(); // re-read tokens
+  });
+})();
+
+/* =============================================================
+   REVEAL ON SCROLL + COUNT-UP
+   ============================================================= */
+(function(){
+  const io=new IntersectionObserver((es)=>{
+    es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);
+      e.target.querySelectorAll?.('[data-count]').forEach(countUp);
+      e.target.querySelectorAll?.('.meter i').forEach(m=>m.style.width=m.dataset.w+'%');
+    }});
+  },{threshold:.16});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+  // hero counters fire immediately
+  document.querySelectorAll('.hero [data-count]').forEach(countUp);
+  function countUp(el){
+    const to=+el.dataset.count, suf=el.dataset.suffix||''; let s=null;
+    const dur=1100;
+    function tick(t){ if(!s)s=t; const p=clamp((t-s)/dur,0,1);
+      el.textContent=Math.round(to*(1-Math.pow(1-p,3)))+suf;
+      if(p<1) requestAnimationFrame(tick); }
+    requestAnimationFrame(tick);
+  }
+})();
+
+/* =============================================================
+   STACK — build layers, lens toggle, click-to-filter
+   ============================================================= */
+const stackEl=document.getElementById('stack');
+let lens='askdavid';
+function buildStack(){
+  stackEl.innerHTML='';
+  [4,3,2,1].forEach(id=>{
+    const L=LAYERS[id];
+    const el=document.createElement('div');
+    el.className='layer'; el.style.setProperty('--c',`var(--${L.key})`);
+    el.tabIndex=0; el.setAttribute('role','button');
+    el.innerHTML=`
+      <div class="lyr-idx">L${id}</div>
+      <div>
+        <h3>${L.name}</h3>
+        <div class="lyr-map">${L[lens]}</div>
+        <div class="go">▸ screen the ${countIn(id)} companies in this layer</div>
+      </div>
+      <div class="lyr-tag">${L.tag}</div>`;
+    const act=()=>{ setLayer(id); document.getElementById('screener').scrollIntoView({behavior:'smooth'}); };
+    el.addEventListener('click',act);
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();act();} });
+    stackEl.appendChild(el);
+  });
+}
+const countIn=id=>DATA.filter(c=>c.l===id).length;
+document.querySelectorAll('.chip.map').forEach(ch=>{
+  ch.addEventListener('click',()=>{
+    document.querySelectorAll('.chip.map').forEach(c=>c.setAttribute('aria-pressed','false'));
+    ch.setAttribute('aria-pressed','true'); lens=ch.dataset.map; buildStack();
+  });
+});
+buildStack();
+
+/* =============================================================
+   SCREENER — filters, sort, search, cards, expand
+   ============================================================= */
+const grid=document.getElementById('grid'), filtersEl=document.getElementById('filters'),
+      sortEl=document.getElementById('sort'), searchEl=document.getElementById('search'),
+      countEl=document.getElementById('count');
+let activeLayer=0, q='';
+const FILTERS=[{id:0,label:'All layers'},{id:4,label:'Trust & Security'},{id:2,label:'Data & Memory'},{id:3,label:'Agents & Apps'},{id:1,label:'Compute & Models'}];
+FILTERS.forEach(f=>{
+  const b=document.createElement('button'); b.className='chip'; b.textContent=f.label;
+  b.setAttribute('aria-pressed', f.id===0?'true':'false'); b.dataset.layer=f.id;
+  if(f.id!==0) b.style.setProperty('color',`var(--${LAYERS[f.id].key})`);
+  b.addEventListener('click',()=>setLayer(f.id));
+  filtersEl.appendChild(b);
+});
+function setLayer(id){
+  activeLayer=id;
+  filtersEl.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed', (+c.dataset.layer===id)?'true':'false'));
+  render();
+}
+sortEl.addEventListener('change',render);
+searchEl.addEventListener('input',()=>{ q=searchEl.value.trim().toLowerCase(); render();});
+
+function render(){
+  const key=sortEl.value;
+  let rows=DATA.filter(c=>(activeLayer===0||c.l===activeLayer) &&
+    (!q || c.t.toLowerCase().includes(q) || c.n.toLowerCase().includes(q)));
+  rows.sort((a,b)=>{
+    const gv=(c)=>({score:c.score,nrr:c.nrr??-1,sw:c.sw,moat:c.moat,r40:c.r40})[key];
+    return gv(b)-gv(a);
+  });
+  countEl.textContent=`${rows.length} compan${rows.length===1?'y':'ies'} · sorted by ${sortEl.options[sortEl.selectedIndex].text.replace('Sort: ','')}`;
+  grid.innerHTML='';
+  rows.forEach((c,i)=>{
+    const card=document.createElement('article');
+    card.className='card'; card.style.setProperty('--c',c.cvar);
+    card.style.animationDelay=(i*28)+'ms';
+    const nrrTxt=c.nrr==null?'n/a':c.nrr+'%';
+    const r40cls=c.r40>=40?'good':(c.r40>=25?'warn':'bad');
+    const circ=2*Math.PI*22, off=circ*(1-c.score/100);
+    card.innerHTML=`
+      <div class="card-top">
+        <span class="tick">${c.t}</span>
+        <div>
+          <h3 class="co-name">${c.n}</h3>
+          <div class="lyr">${LAYERS[c.l].name}</div>
+        </div>
+        <div class="ring" title="Moat Score">
+          <svg width="52" height="52">
+            <circle cx="26" cy="26" r="22" fill="none" stroke="var(--surface-2)" stroke-width="5"/>
+            <circle cx="26" cy="26" r="22" fill="none" stroke="${c.cvar}" stroke-width="5"
+              stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${circ.toFixed(1)}"
+              class="ringfill"/>
+          </svg>
+          <div class="rv" style="color:${c.cvar}">${c.score}</div>
+        </div>
+      </div>
+      <div class="bars">
+        ${bar('Trust moat',c.moat,c.moat)}
+        ${bar('Switching',c.sw,c.sw)}
+        ${bar('NRR', c.nrr==null?0:Math.round(nrrNorm(c)), nrrTxt)}
+        ${bar('Rule of 40', Math.round(r40Norm(c)), c.r40)}
+      </div>
+      <div class="card-foot">
+        <span class="pill">MOAT <b>${c.moat}</b></span>
+        <span class="pill">NRR <b>${nrrTxt}</b></span>
+        <span class="pill ${r40cls}">R40 <b>${c.r40}</b></span>
+        <span class="pill">Δ ${c.g}% g · ${c.m}% fcf</span>
+      </div>
+      <div class="detail"><div>
+        <p>${c.why}</p>
+        <div class="mech">↳ switching-cost mechanism · ${c.mech}</div>
+      </div></div>`;
+    card.addEventListener('click',()=>card.classList.toggle('open'));
+    grid.appendChild(card);
+    // animate ring + bars next frame
+    requestAnimationFrame(()=>{
+      const rf=card.querySelector('.ringfill'); rf.style.transition='stroke-dashoffset 1s cubic-bezier(.2,.7,.2,1)';
+      rf.style.strokeDashoffset=off.toFixed(1);
+      card.querySelectorAll('.bt i').forEach(el=>el.style.width=el.dataset.w+'%');
+    });
+  });
+}
+function bar(label,w,num){
+  return `<div class="brow"><span class="bl">${label}</span>
+    <span class="bt"><i data-w="${clamp(w,0,100)}"></i></span>
+    <span class="bn">${num}</span></div>`;
+}
+render();
+
+/* =============================================================
+   SCATTER — Rule of 40 (growth × FCF margin)
+   ============================================================= */
+const svg=document.getElementById('scatter'), legendEl=document.getElementById('legend'), tip=document.getElementById('tip');
+const SC={x0:64,y0:392,x1:724,y1:36, gx:[0,60], my:[-10,50]};
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function sx(g){ return SC.x0+(g-SC.gx[0])/(SC.gx[1]-SC.gx[0])*(SC.x1-SC.x0); }
+function sy(m){ return SC.y0+(m-SC.my[0])/(SC.my[1]-SC.my[0])*(SC.y1-SC.y0); }
+[[4,'Trust & Security'],[2,'Data & Memory'],[3,'Agents & Apps'],[1,'Compute & Models']].forEach(([id,nm])=>{
+  const s=document.createElement('span'); s.innerHTML=`<i style="background:var(--${LAYERS[id].key})"></i>${nm}`;
+  legendEl.appendChild(s);
+});
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
+function paintScatter(){
+  svg.innerHTML='';
+  const ink=cssv('--muted'), line=cssv('--line'), line2=cssv('--line-2'), inkc=cssv('--ink-2');
+  // grid + axes
+  for(let g=0; g<=60; g+=10){ const x=sx(g);
+    svg.appendChild(el('line',{x1:x,y1:SC.y1,x2:x,y2:SC.y0,stroke:line,'stroke-width':1,opacity:.5}));
+    svg.appendChild(el('text',{x,y:SC.y0+18,'text-anchor':'middle','font-size':11},)).textContent=g+'%';
+  }
+  for(let m=-10; m<=50; m+=10){ const y=sy(m);
+    svg.appendChild(el('line',{x1:SC.x0,y1:y,x2:SC.x1,y2:y,stroke:line,'stroke-width':1,opacity:.5}));
+    const t=el('text',{x:SC.x0-10,y:y+4,'text-anchor':'end','font-size':11}); t.textContent=m+'%'; svg.appendChild(t);
+  }
+  // axis labels
+  const xl=el('text',{x:(SC.x0+SC.x1)/2,y:SC.y0+38,'text-anchor':'middle','font-size':12,fill:inkc}); xl.textContent='Revenue growth →'; svg.appendChild(xl);
+  const yl=el('text',{x:18,y:(SC.y0+SC.y1)/2,'text-anchor':'middle','font-size':12,fill:inkc,transform:`rotate(-90 18 ${(SC.y0+SC.y1)/2})`}); yl.textContent='FCF margin →'; svg.appendChild(yl);
+  // Rule of 40 line: g + m = 40  => m = 40 - g
+  const p1={x:sx(0),y:sy(40)}, p2={x:sx(50),y:sy(-10)};
+  svg.appendChild(el('line',{x1:p1.x,y1:p1.y,x2:p2.x,y2:p2.y,stroke:cssv('--moat'),'stroke-width':1.6,'stroke-dasharray':'6 5',opacity:.9}));
+  const rl=el('text',{x:p1.x+8,y:p1.y-8,'font-size':11,fill:cssv('--moat')}); rl.textContent='Rule of 40'; svg.appendChild(rl);
+  // quadrant hint
+  const q=el('text',{x:SC.x1-8,y:SC.y1+16,'text-anchor':'end','font-size':11,fill:ink,class:'quad'}); q.textContent='clears the bar ↗'; svg.appendChild(q);
+  // dots (sorted so small on top)
+  [...DATA].sort((a,b)=>b.score-a.score).forEach(c=>{
+    const x=sx(c.g), y=sy(c.m), r=6+ (c.score-60)/40*9;
+    const rr=clamp(r,6,16);
+    const g=el('g',{});
+    g.appendChild(el('circle',{cx:x,cy:y,r:rr,fill:`var(--${LAYERS[c.l].key})`,'fill-opacity':.24,stroke:`var(--${LAYERS[c.l].key})`,'stroke-width':1.6}));
+    g.appendChild(el('circle',{cx:x,cy:y,r:2.4,fill:`var(--${LAYERS[c.l].key})`}));
+    const lab=el('text',{x:x+rr+4,y:y+4,'font-size':10,fill:inkc}); lab.textContent=c.t; g.appendChild(lab);
+    g.style.cursor='pointer';
+    g.addEventListener('pointerenter',ev=>showTip(ev,c));
+    g.addEventListener('pointermove',ev=>moveTip(ev));
+    g.addEventListener('pointerleave',()=>{tip.style.opacity=0;});
+    svg.appendChild(g);
+  });
+}
+function showTip(ev,c){
+  tip.innerHTML=`<b>${c.t}</b> · ${c.n}<br>${LAYERS[c.l].name}<br>
+    growth ${c.g}% · fcf ${c.m}% · <b>R40 ${c.r40}</b><br>NRR ${c.nrr==null?'n/a':c.nrr+'%'} · Moat ${c.score}`;
+  tip.style.opacity=1; moveTip(ev);
+}
+function moveTip(ev){
+  const pad=14; let x=ev.clientX+pad, y=ev.clientY+pad;
+  const w=tip.offsetWidth, h=tip.offsetHeight;
+  if(x+w>innerWidth-8) x=ev.clientX-w-pad;
+  if(y+h>innerHeight-8) y=ev.clientY-h-pad;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+// paint when scrolled into view (so it animates with tokens resolved)
+new IntersectionObserver((es,ob)=>{
+  es.forEach(e=>{ if(e.isIntersecting){ paintScatter(); ob.disconnect(); }});
+},{threshold:.2}).observe(svg);
+</script>
+</body>
+</html>
